@@ -194,7 +194,7 @@ impl UnlockTemplate for SmbUnlock {
                 lock_time: tx.lock_time,
                 scope: SIGNATURE_SCOPE,
             })?;
-            let c = split_ctx(&pre, 2);
+            let c = split_ctx(&pre, 2)?;
             let mut for_sig = c.header.clone();
             for_sig.extend(&c.lock_len);
             for_sig.extend(&c.lock_script_code);

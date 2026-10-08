@@ -44,9 +44,9 @@ fn offset_tree_height(o: u64) -> usize {
 }
 
 /// The reference's hashPair(left, right) on display-order hex.
-pub fn hash_pair(left: &str, right: &str) -> String {
-    let b = js_hex_to_array(&format!("{left}{right}"));
-    hex_encode(&reversed(&sha256d(&reversed(&b))))
+pub fn hash_pair(left: &str, right: &str) -> Result<String> {
+    let b = js_hex_to_array(&format!("{left}{right}"))?;
+    Ok(hex_encode(&reversed(&sha256d(&reversed(&b)))))
 }
 
 impl MerklePath {
@@ -57,7 +57,7 @@ impl MerklePath {
 
     /// `MerklePath.fromHex`.
     pub fn from_hex(h: &str) -> Result<MerklePath> {
-        MerklePath::from_binary(&js_hex_to_array(h), true)
+        MerklePath::from_binary(&js_hex_to_array(h)?, true)
     }
 
     pub fn from_reader(r: &mut Reader, legal_offsets_only: bool) -> Result<MerklePath> {
@@ -148,7 +148,8 @@ impl MerklePath {
                 }
                 w.0.push(flags);
                 if flags & 1 == 0 {
-                    w.bytes(&reversed(&js_hex_to_array(leaf.hash.as_deref().unwrap_or(""))));
+                    // a parsed leaf's hash is always hex; a hand-built bad one serialises as zeros
+                    w.bytes(&reversed(&js_hex_to_array(leaf.hash.as_deref().unwrap_or("")).unwrap_or_else(|_| vec![0; 32])));
                 }
             }
         }
@@ -198,56 +199,62 @@ impl MerklePath {
         let tree_height = self.path.len().max(offset_tree_height(max_off));
         for height in 0..tree_height {
             let offset = sibling_of(offset_at_height(index, height));
-            let leaf = self.find_or_compute_leaf(height, offset);
+            let leaf = self.find_or_compute_leaf(height, offset)?;
             let last_odd = self.path.len() == 1 && offset_at_height(index, height) == offset_at_height(max_off, height);
             working = match leaf {
                 None => {
                     if last_odd {
-                        hash_pair(&working, &working)
+                        hash_pair(&working, &working)?
                     } else {
                         return err(format!("Missing hash for index {index} at height {height}"));
                     }
                 }
-                Some(l) if l.duplicate => hash_pair(&working, &working),
-                Some(l) if offset % 2 == 1 => hash_pair(l.hash.as_deref().unwrap_or(""), &working),
-                Some(l) => hash_pair(&working, l.hash.as_deref().unwrap_or("")),
+                Some(l) if l.duplicate => hash_pair(&working, &working)?,
+                Some(l) if offset % 2 == 1 => hash_pair(l.hash.as_deref().unwrap_or(""), &working)?,
+                Some(l) => hash_pair(&working, l.hash.as_deref().unwrap_or(""))?,
             };
         }
         Ok(working)
     }
 
-    fn find_or_compute_leaf(&self, height: usize, offset: u64) -> Option<Leaf> {
+    fn find_or_compute_leaf(&self, height: usize, offset: u64) -> Result<Option<Leaf>> {
         if height < self.path.len() {
             if let Some(l) = self.path[height].iter().find(|l| l.offset == offset) {
-                return Some(l.clone());
+                return Ok(Some(l.clone()));
             }
         }
         if height == 0 {
-            return None;
+            return Ok(None);
         }
         let h = height - 1;
-        let l = offset.checked_mul(2)?;
-        if l > MAX_SAFE_INTEGER {
-            return None;
-        }
-        let leaf0 = self.find_or_compute_leaf(h, l)?;
-        let h0 = leaf0.hash.clone().filter(|s| !s.is_empty())?;
-        let leaf1 = self.find_or_compute_leaf(h, l + 1);
-        match leaf1 {
+        let l = match offset.checked_mul(2) {
+            Some(l) if l <= MAX_SAFE_INTEGER => l,
+            _ => return Ok(None),
+        };
+        let leaf0 = match self.find_or_compute_leaf(h, l)? {
+            Some(x) => x,
+            None => return Ok(None),
+        };
+        let h0 = match leaf0.hash.clone().filter(|s| !s.is_empty()) {
+            Some(x) => x,
+            None => return Ok(None),
+        };
+        let leaf1 = self.find_or_compute_leaf(h, l + 1)?;
+        Ok(match leaf1 {
             Some(ref l1) if l1.hash.is_some() => {
-                let w = if l1.duplicate { hash_pair(&h0, &h0) } else { hash_pair(l1.hash.as_deref().unwrap(), &h0) };
+                let w = if l1.duplicate { hash_pair(&h0, &h0)? } else { hash_pair(l1.hash.as_deref().unwrap(), &h0)? };
                 Some(Leaf { offset, hash: Some(w), ..Default::default() })
             }
             other => {
                 if other.as_ref().is_some_and(|l1| l1.duplicate)
                     || (self.path.len() == 1 && l == offset_at_height(self.max_offset0(), h))
                 {
-                    Some(Leaf { offset, hash: Some(hash_pair(&h0, &h0)), ..Default::default() })
+                    Some(Leaf { offset, hash: Some(hash_pair(&h0, &h0)?), ..Default::default() })
                 } else {
                     None
                 }
             }
-        }
+        })
     }
 
     /// `combine(other)`.

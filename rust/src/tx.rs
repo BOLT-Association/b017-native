@@ -131,6 +131,52 @@ impl Transaction {
         Ok(hex_encode(&self.to_binary()?))
     }
 
+    /// TS `toEF()` (BRC-30 Extended Format): every input carries its source output's amount and lock.
+    pub fn to_binary_ef(&self) -> Result<Vec<u8>> {
+        let mut w = Writer::default();
+        w.u32(self.version);
+        w.bytes(&[0, 0, 0, 0, 0, 0xef]);
+        w.varint(self.inputs.len() as u64);
+        for i in &self.inputs {
+            let src = match &i.source_transaction {
+                None => return err("All inputs must have source transactions when serializing to EF format"),
+                Some(s) => s,
+            };
+            match &i.source_txid {
+                None => w.bytes(&src.borrow().hash()?),
+                Some(id) => w.bytes(&reversed(&require_txid(id)?)),
+            }
+            w.u32(i.source_output_index);
+            let us = match &i.unlocking_script {
+                None => return err("unlockingScript is undefined"),
+                Some(s) => s.to_binary(),
+            };
+            w.varint(us.len() as u64);
+            w.bytes(&us);
+            w.u32(i.seq());
+            let out = match i.source_output() {
+                Some(o) if o.locking_script.is_some() => o,
+                _ => return err("Cannot read properties of undefined (reading 'satoshis')"),
+            };
+            w.u64(out.sats());
+            let ls = out.locking_script.unwrap().to_binary();
+            w.varint(ls.len() as u64);
+            w.bytes(&ls);
+        }
+        w.varint(self.outputs.len() as u64);
+        for o in &self.outputs {
+            w.u64(o.sats());
+            let ls = match &o.locking_script {
+                None => return err("Cannot read properties of undefined (reading 'toUint8Array')"),
+                Some(s) => s.to_binary(),
+            };
+            w.varint(ls.len() as u64);
+            w.bytes(&ls);
+        }
+        w.u32(self.lock_time);
+        Ok(w.0)
+    }
+
     /// TS `Transaction.fromBinary` (strict varints, no trailing data).
     pub fn from_binary(b: &[u8]) -> Result<Transaction> {
         let mut r = Reader::new(b);
@@ -296,8 +342,12 @@ impl<'a> Reader<'a> {
             f => Ok(f as u64),
         }
     }
-    /// TS `readVarIntNum` (non-strict).
+    /// TS `readVarIntNum` (non-strict), on the TS array Reader (its own error text).
     pub fn varint(&mut self) -> Result<u64> {
+        let r = self.varint_inner();
+        r.map_err(|e| if e.0.starts_with("ReaderUint8Array") { Error("Reader read exceeds available data".into()) } else { e })
+    }
+    fn varint_inner(&mut self) -> Result<u64> {
         match self.u8()? {
             0xfd => Ok(self.u16()? as u64),
             0xfe => Ok(self.u32()? as u64),

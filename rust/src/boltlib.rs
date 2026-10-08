@@ -104,10 +104,16 @@ fn js_slice(b: &[u8], a: usize, e: usize) -> Vec<u8> {
     b[a..e].to_vec()
 }
 
-/// `splitCtx`.
-pub fn split_ctx(ctx: &[u8], unlock_bytes_len: usize) -> Ctx {
+/// `splitCtx`. Like the TS (a Reader at 104), it fails when the length prefix is not there to read.
+pub fn split_ctx(ctx: &[u8], unlock_bytes_len: usize) -> Result<Ctx> {
+    if ctx.len() < 104 {
+        return err("Reader position exceeds available data");
+    }
+    if ctx.len() == 104 {
+        return err("Reader read exceeds available data");
+    }
     let header = js_slice(ctx, 0, 104);
-    let first = ctx.get(104).copied().unwrap_or(0) as usize;
+    let first = ctx[104] as usize;
     let len_size = match first {
         0xfd => 3,
         0xfe => 5,
@@ -116,25 +122,28 @@ pub fn split_ctx(ctx: &[u8], unlock_bytes_len: usize) -> Ctx {
     };
     let code_len = js_slice(ctx, 104, 104 + len_size);
     let mut offset = 104 + len_size;
+    if len_size > 1 && 105 + len_size - 1 > ctx.len() {
+        return err("Reader read exceeds available data");
+    }
     let at = js_slice(ctx, 105, 113);
     let actual = match first {
-        0xfd if at.len() >= 2 => u16::from_le_bytes([at[0], at[1]]) as usize,
-        0xfe if at.len() >= 4 => u32::from_le_bytes([at[0], at[1], at[2], at[3]]) as usize,
-        0xff if at.len() >= 8 => u64::from_le_bytes(at[..8].try_into().unwrap()) as usize,
+        0xfd => u16::from_le_bytes([at[0], at[1]]) as usize,
+        0xfe => u32::from_le_bytes([at[0], at[1], at[2], at[3]]) as usize,
+        0xff => u64::from_le_bytes(at[..8].try_into().unwrap()) as usize,
         _ => first,
     };
     let code = js_slice(ctx, offset, offset.saturating_add(actual));
     offset = offset.saturating_add(actual);
     let n = unlock_bytes_len.min(code.len());
     let lock = code[n..].to_vec();
-    Ctx {
+    Ok(Ctx {
         header,
         code_len,
         unlock_script_code: code[..n].to_vec(),
         footer: js_slice(ctx, offset, offset.saturating_add(52)),
         lock_len: varint_bytes(lock.len() as u64),
         lock_script_code: lock,
-    }
+    })
 }
 
 pub fn le32(n: u32) -> Vec<u8> {
@@ -162,7 +171,7 @@ pub fn spent_outpoint(tx: &Transaction, vin: usize) -> Result<Vec<u8>> {
         Some(s) => s.borrow().hash()?,
         None => {
             let s = input.source_txid.clone().unwrap_or_default();
-            reversed(&hex_decode(&s).unwrap_or_else(|| js_hex_to_array(&s)))
+            reversed(&js_hex_to_array(&s)?)
         }
     };
     if txid.is_empty() {

@@ -104,8 +104,12 @@ func SplitCtx(ctx []byte, unlockBytesLen int) (Ctx, error) {
 		}
 		return clone(ctx[a:b])
 	}
-	if len(ctx) <= 104 {
+	// new Reader(ctx, 104).readUInt8(): a Reader placed past the end, or a read past it.
+	if len(ctx) < 104 {
 		return Ctx{}, errors.New("Reader position exceeds available data")
+	}
+	if len(ctx) == 104 {
+		return Ctx{}, errors.New("Reader read exceeds available data")
 	}
 	header := sl(0, 104)
 	first := int(ctx[104])

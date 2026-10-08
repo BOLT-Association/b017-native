@@ -50,7 +50,10 @@ pub fn current_args_start(l: &SingleLayout) -> usize {
 
 /// `ancestorPiece`: one named piece from an ancestor commit tx.
 pub fn ancestor_piece(name: &str, tx: &Transaction, leading_value_pushes: usize, layout: &SingleLayout) -> Result<Vec<u8>> {
-    let in0 = &tx.inputs[0];
+    let in0 = match tx.inputs.first() {
+        Some(i) => i,
+        None => return err("Cannot read properties of undefined (reading 'unlockingScript')"),
+    };
     let in1 = tx.inputs.get(1);
     let u = match &in0.unlocking_script {
         Some(u) => u,
@@ -59,7 +62,10 @@ pub fn ancestor_piece(name: &str, tx: &Transaction, leading_value_pushes: usize,
     let cur = current_args_start(layout);
     let spent_lock = Script::from_binary(&chunk_data(u, cur + 8));
     let sd = |i: usize| chunk_data(&spent_lock, leading_value_pushes + i);
-    let out_lock = tx.outputs[0].locking_script.clone().unwrap_or_default();
+    let out_lock = match tx.outputs.first() {
+        Some(o) => o.locking_script.clone().unwrap_or_default(),
+        None => return err("Cannot read properties of undefined (reading 'lockingScript')"),
+    };
     let od = |i: usize| chunk_data(&out_lock, leading_value_pushes + i);
     let change = tx.outputs.get(2);
     let uc = |i: usize| chunk_data(u, i);

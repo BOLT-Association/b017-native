@@ -95,7 +95,7 @@ impl UnlockTemplate for SingleSpendUnlock {
                 lock_time: tx.lock_time,
                 scope: SIGNATURE_SCOPE,
             })?;
-            let c = split_ctx(&pre, 2);
+            let c = split_ctx(&pre, 2)?;
             let mut ctx_for_sig = c.header.clone();
             ctx_for_sig.extend(&c.lock_len);
             ctx_for_sig.extend(&c.lock_script_code);

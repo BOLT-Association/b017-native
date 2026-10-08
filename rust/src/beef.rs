@@ -32,7 +32,7 @@ pub fn to_atomic_beef(tx: &TxRef) -> Result<Vec<u8>> {
 /// `fromBeef`: parse BEEF V2 (plain or Atomic) into its subject transaction, ancestors wired in.
 pub fn from_beef(input: &Bin) -> Result<TxRef> {
     let bytes = match input {
-        Bin::Hex(s) => js_hex_to_array(s),
+        Bin::Hex(s) => js_hex_to_array(s)?,
         Bin::Bytes(b) => b.to_vec(),
     };
     let mut beef = Beef::from_binary(&bytes)?;

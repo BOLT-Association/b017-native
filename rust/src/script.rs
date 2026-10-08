@@ -245,13 +245,8 @@ pub fn hex_decode(s: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// `Utils.toArray(str, 'hex')` for a possibly malformed string: odd length gets a leading 0, a bad pair is 0.
-pub fn js_hex_to_array(s: &str) -> Vec<u8> {
+/// `Utils.toArray(str, 'hex')`: "Invalid hex string" for a non-hex character, a leading 0 for an odd length.
+pub fn js_hex_to_array(s: &str) -> crate::error::Result<Vec<u8>> {
     let s = if s.len() % 2 != 0 { format!("0{s}") } else { s.to_string() };
-    let b = s.as_bytes();
-    let mut out = Vec::with_capacity(b.len() / 2);
-    for i in (0..b.len()).step_by(2) {
-        out.push(hex_decode(std::str::from_utf8(&b[i..i + 2]).unwrap_or("00")).map_or(0, |v| v[0]));
-    }
-    out
+    hex_decode(&s).ok_or_else(|| crate::error::Error("Invalid hex string".into()))
 }

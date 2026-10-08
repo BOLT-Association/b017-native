@@ -637,7 +637,7 @@ impl Beef {
             if self.version == BEEF_V2 {
                 if t.is_txid_only() {
                     w.0.push(2);
-                    w.bytes(&reversed(&js_hex_to_array(&t.txid()?)));
+                    w.bytes(&reversed(&js_hex_to_array(&t.txid()?)?));
                 } else if let Some(i) = t.bump_index {
                     w.0.push(1);
                     w.varint(i as u64);
@@ -698,7 +698,7 @@ impl Beef {
         let mut w = Writer::default();
         nb.to_writer(&mut w)?;
         let mut out = ATOMIC_BEEF.to_le_bytes().to_vec();
-        out.extend(reversed(&js_hex_to_array(txid)));
+        out.extend(reversed(&js_hex_to_array(txid)?));
         out.extend(w.0);
         Ok(out)
     }
