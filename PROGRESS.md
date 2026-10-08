@@ -8,9 +8,9 @@ Reference: `../b017` (branch `async-signer`, commit `a305f58`), read-only. Its `
 | Phase | State |
 |---|---|
 | 0 vectors + Rust SDK fix | vectors recorded and packed; SDK fix committed locally (patch in `third_party/patches`) |
-| 1 primitives | not started |
-| 2 NFT path | not started |
-| 3 scanner | not started |
+| 1 primitives | Go done (Rust pending) |
+| 2 NFT path | Go done (Rust pending) |
+| 3 scanner | Go done (Rust pending) |
 | 4 fungible | not started |
 | 5 hardening + p2p adapter | not started |
 
@@ -63,7 +63,25 @@ cd ../b017-native && node vectors/gen/pack.mjs
    upstream with `third_party/patches/0001-…patch`, and file an issue on `bsv-blockchain/rs-sdk` (same bug:
    `src/script/spend_ops.rs` `get_subscript`).
 
+## Go port (phases 1-3)
+
+- Model: `script.go` (ts-sdk Script chunk semantics), `tx.go` (TS Transaction: an input may carry a txid, an
+  attached source, both or neither; missing unlocking script / amount / sequence representable), `sighash.go`
+  (formatBip143, DER as TS writes it: S not normalised, Signer / Recipient), `merklepath.go` + `beefsdk.go`
+  (ts-sdk MerklePath and Beef ported: go-sdk's map-based Beef loses the order b017's checks and bytes depend on),
+  `spend.go` (TS Spend on go-sdk's interpreter: v>1 after-Chronicle with no policy flags; v1 pre-Genesis with
+  SIGPUSHONLY/CLEANSTACK/MINIMALDATA/LOW_S/NULLDUMMY/STRICTENC/DERSIG, plus BIP16 because go-sdk refuses CLEANSTACK
+  without it).
+- b017: `boltlib.go`, `fingerprints.go`, `beef.go`, `pay2proof.go`, `singleancestor.go`, `singlespend.go`,
+  `nfttemplates.go`, `verifyevents.go`; `suffixes_gen.go` from `vectors/gen/embed.mjs`.
+- Replay (`go test ./...`): verifyTx 379/379; toAtomicBeef 46/46 byte-equal; fromBeef 63/63 (graph node ids
+  equal); lock.* all; sign.MinSimple 82, sign.AuthBolt 142, sign.Pay2Proof 56, sign.p2pkhUnlock 132 byte-equal;
+  verifyEvents 260/261, verifyEvent 101/102, verifyAndBroadcast 76/76 field for field (the 2 not run hand the
+  scanner a non-array batch, which Go's `[]any` cannot express). Reasons: all exact except 44 whose tail is an
+  SDK's error text (script engine, hex parse), which match on b017's prefix.
+- Recorded callbacks (isKnownBlockRoot, chainTracker, broadcaster) are replayed from the recorded answers; a
+  question the reference never asked is a test failure.
+
 ## Next
 
-Phase 1: Go module (`go/`), primitives + BEEF + fingerprints, and the replay harness that loads
-`vectors/nodes.json` into go-sdk transactions.
+Phase 4 in Go (SimpleMulti template, multiBoltLib, MultiBOLT class), then the Rust port of phases 1-4.
