@@ -22,9 +22,10 @@ for (const row of readFileSync(profile, 'utf8').trim().split('\n').slice(1)) {
   if (path.endsWith('_gen.go')) continue
   const file = path.split('/').pop()
   const text = lines(path).slice(+l1 - 1, +l2)
-  const body = text.join('\n').slice(+c1 - 1)
-  const propagate = /^\s*return\s+(?:[\w.{}\[\]*]+\s*,\s*)*err\s*\}?\s*$/.test(body.split('}')[0].trim()) &&
-    /if\s+(?:[\w, ]+:?=\s*[^;]+;\s*)?err\s*!=\s*nil\s*\{\s*$/.test(lines(path)[+l1 - 1].slice(0, +c1 - 1))
+  // a block starts at its opening brace and ends at its closing one
+  const body = text.join('\n').slice(+c1 - 1).replace(/^\{/, '').replace(/\}\s*$/, '').trim()
+  const propagate = /^return\s+(?:[\w.{}\[\]*&]+\s*,\s*)*err$/.test(body) &&
+    /if\s+(?:[^;{]+;\s*)?err\s*!=\s*nil\s*$/.test(lines(path)[+l1 - 1].slice(0, +c1 - 1))
   const marked = /\/\/ unreachable: \S/.test(lines(path)[+l1 - 1]) || /\/\/ unreachable: \S/.test(lines(path)[+l1 - 2] ?? '')
   const g = (groups[SDK.has(file) && !path.includes('authbolt/') ? 'sdk ports' : path.includes('authbolt/') ? 'authbolt' : 'b017 ports'] ??= { n: 0, cov: 0, prop: 0, marked: 0 })
   if (propagate) { g.prop += +n; continue }

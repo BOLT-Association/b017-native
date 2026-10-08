@@ -74,7 +74,11 @@ test('write edge vectors', async () => {
     void w
     await rec('splitCtx', [ctx, ub], () => Object.fromEntries(Object.entries(lib.splitCtx(ctx, ub)).map(([k, v]) => [k, hex(v as number[])])))
   }
-  for (const short of [[], new Array(50).fill(1), new Array(106).fill(0xfd)]) {
+  const p104 = new Array(104).fill(1)
+  for (const short of [[], new Array(50).fill(1), new Array(106).fill(0xfd), p104,
+    // a declared length past the data; 0xff lengths (small, past the data, past 2^63, cut short)
+    [...p104, 0x10, 2, 2, 2], [...p104, 0xff, 3, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, ...new Array(52).fill(3)],
+    [...p104, 0xff, 0, 1, 0, 0, 0, 0, 0, 0, 2, 2], [...p104, 0xff, ...new Array(8).fill(0xff), 2, 2], [...p104, 0xff, 1, 2]]) {
     await rec('splitCtx', [short, 2], () => Object.fromEntries(Object.entries(lib.splitCtx(short, 2)).map(([k, v]) => [k, hex(v as number[])])))
   }
   for (const n of [0, 0xfc, 0xfd, 0xffff, 0x10000, 0xffffffff]) await rec('le32', [n], () => lib.le32(n))
@@ -97,7 +101,28 @@ test('write edge vectors', async () => {
   const shortCtx = Transaction.fromHex(shapes[1].toHex())
   shortCtx.inputs[0].unlockingScript = new UnlockingScript(new Array(195).fill(0).map(() => ({ op: 0 })))
   const meltOnly = new Transaction(2, [], [{ satoshis: 1, lockingScript: new P2PKH().lock(pkh) }])
-  for (const t of [...new Set(shapes.map((s) => s.toHex()))].map((h) => Transaction.fromHex(h)).concat([broken, shortCtx, meltOnly, new Transaction(2, [], [])])) {
+  // crafted CTX pushes (chunk 192 header, 195 scriptCode, 197 scriptCode length): every varint width, a length
+  // past the data, a length past 2^53, a short header, and a scriptCode of OP_0, a bare opcode and one push
+  const ctxTx = (header: number[], len: number[], code: number[]) => {
+    const t = Transaction.fromHex(shapes[1].toHex())
+    const cs = t.inputs[0].unlockingScript!.chunks
+    for (const [i, d] of [[192, header], [195, code], [197, len]] as [number, number[]][]) cs[i] = new Script().writeBin(d).chunks[0]
+    t.inputs[0].unlockingScript = new UnlockingScript(cs)
+    return t
+  }
+  const hdr = new Array(104).fill(7)
+  const code = [0x00, 0x76, 0x01, 0xaa]
+  const crafted = [
+    ctxTx(hdr, [0xfe, 4, 0, 0, 0], code),
+    ctxTx(hdr, [0xff, 4, 0, 0, 0, 0, 0, 0, 0], code),
+    ctxTx(hdr, [0xfe, 0xff, 0xff, 0xff, 0x7f], code),
+    ctxTx(hdr, [0xff, 0, 0, 0, 0, 0, 0, 0x40, 0], code),
+    ctxTx(hdr, [0xfd, 4], code),
+    ctxTx(hdr, [4], code),
+    ctxTx(hdr.slice(0, 50), [4], code),
+    ctxTx(hdr, [0xfe, 4], []),
+  ]
+  for (const t of [...new Set(shapes.map((s) => s.toHex()))].map((h) => Transaction.fromHex(h)).concat([broken, shortCtx, meltOnly, new Transaction(2, [], []), ...crafted])) {
     for (const name of multi.PIECE_NAMES) await rec('smbAncestorPiece', [name, t], () => multi.ancestorPiece(name, t))
   }
   // every NFT ancestor piece of commits with and without a funding input / change output

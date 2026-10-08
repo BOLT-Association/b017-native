@@ -92,15 +92,12 @@ type Ctx struct {
 // footer(52) + varint(len lockScriptCode). Like the TS (a Reader at 104), it fails when the length prefix is
 // not there to read.
 func SplitCtx(ctx []byte, unlockBytesLen int) (Ctx, error) {
-	sl := func(a, b int) []byte { // JS slice: clamped
-		if a > len(ctx) {
-			a = len(ctx)
-		}
+	sl := func(a, b int) []byte { // JS slice with 0 <= a <= b: both ends clamp to the length
 		if b > len(ctx) {
 			b = len(ctx)
 		}
-		if b < a {
-			b = a
+		if a > b {
+			a = b
 		}
 		return clone(ctx[a:b])
 	}
@@ -134,7 +131,8 @@ func SplitCtx(ctx []byte, unlockBytesLen int) (Ctx, error) {
 	case 0xfe:
 		actual = int(binary.LittleEndian.Uint32(ctx[105:109]))
 	case 0xff:
-		actual = int(binary.LittleEndian.Uint64(ctx[105:113]))
+		// past the data, JS slices to the end; clamping keeps a length above 2^63 from turning negative as an int
+		actual = int(min(binary.LittleEndian.Uint64(ctx[105:113]), uint64(len(ctx))))
 	}
 	code := sl(offset, offset+actual)
 	offset += actual

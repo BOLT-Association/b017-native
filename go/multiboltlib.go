@@ -49,18 +49,13 @@ func readVarIntNum(b []byte, pos *int) uint64 {
 	return uint64(first)
 }
 
+// jsSlice is Array.prototype.slice for the callers here, which pass 0 <= a <= e: both ends clamp to the length.
 func jsSlice(b []byte, a, e int) []byte {
-	if a < 0 {
-		a = 0
-	}
-	if a > len(b) {
-		a = len(b)
-	}
 	if e > len(b) {
 		e = len(b)
 	}
-	if e < a {
-		e = a
+	if a > e {
+		a = e
 	}
 	return clone(b[a:e])
 }
