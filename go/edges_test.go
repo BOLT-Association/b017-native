@@ -183,6 +183,27 @@ func TestVectorsEdges(t *testing.T) {
 				if err == nil {
 					got = "minted"
 				}
+			case "singleSpendSign", "p2pkhUnlockSign", "pay2ProofSign":
+				tx, sats, lock := edgeSpend(key, *r.Args[0].Str)
+				var tpl UnlockTemplate
+				switch r.Fn {
+				case "singleSpendSign":
+					tpl = SingleSpendUnlock(SingleUnlockParams{Signer: key, BeneficiaryPubKeyHash: Hash160(key.PublicKey()),
+						UnlockSuffix: minSimpleUnlockSuffix, SourceSatoshis: sats, LockingScript: lock})
+				case "p2pkhUnlockSign":
+					tpl = P2PKHUnlock(key)
+				default:
+					var n uint64
+					if sats != nil {
+						n = *sats
+					}
+					tpl = Pay2ProofUnlock(key, n, lock)
+				}
+				var us *Script
+				us, err = tpl.Sign(context.Background(), tx, 0)
+				if err == nil {
+					got = us.ToHex()
+				}
 			default:
 				t.Fatalf("no Go mapping for %s", r.Fn)
 			}
@@ -209,4 +230,42 @@ func TestVectorsEdges(t *testing.T) {
 			t.Errorf("#%d %s %v: %s, reference %s", i, r.Fn, r.Args[0].Str, gb, r.Result)
 		}
 	}
+}
+
+// edgeSpend rebuilds the crafted spends of edges.test.ts by name: the tx, and the sourceSatoshis / lockingScript
+// overrides the case passes.
+func edgeSpend(key KeySigner, name string) (*Transaction, *uint64, *Script) {
+	pkh := Hash160(key.PublicKey())
+	lockMs := MinSimpleTemplate{}.Lock(pkh, key.PublicKey(), nil, nil, nil, nil)
+	p2pkhOut := func() *Output { return &Output{Satoshis: U64(1), LockingScript: P2PKHLock(pkh)} }
+	withSrc := func(sats *uint64) *Transaction {
+		s0 := &Transaction{Version: 1, Outputs: []*Output{{Satoshis: sats, LockingScript: lockMs}}}
+		return &Transaction{Version: 2, Outputs: []*Output{p2pkhOut()},
+			Inputs: []*Input{{SourceTransaction: s0, UnlockingScript: NewScript(nil), Sequence: U32(0xffffffff)}}}
+	}
+	txidOnly := func() *Transaction {
+		return &Transaction{Version: 2, Outputs: []*Output{p2pkhOut()},
+			Inputs: []*Input{{SourceTXID: strings.Repeat("ef", 32), UnlockingScript: NewScript(nil), Sequence: U32(0xffffffff)}}}
+	}
+	switch name {
+	case "noRef":
+		return &Transaction{Version: 2, Outputs: []*Output{p2pkhOut()},
+			Inputs: []*Input{{UnlockingScript: NewScript(nil), Sequence: U32(0xffffffff)}}}, nil, nil
+	case "txidOnly":
+		return txidOnly(), nil, nil
+	case "txidOnlyWithAmount":
+		return txidOnly(), U64(5), nil
+	case "txidOnlyWithAmountAndLock":
+		return txidOnly(), U64(5), lockMs
+	case "noAmount":
+		return withSrc(nil), nil, nil
+	case "zeroAmount":
+		return withSrc(U64(0)), nil, nil
+	case "fundWithoutSource":
+		t := withSrc(U64(1))
+		t.Inputs = append(t.Inputs, &Input{SourceTXID: strings.Repeat("aa", 32), UnlockingScript: NewScript(nil), Sequence: U32(0xffffffff)})
+		t.Outputs = append(t.Outputs, p2pkhOut())
+		return t, nil, nil
+	}
+	panic("unknown edge spend " + name)
 }

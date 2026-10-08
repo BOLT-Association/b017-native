@@ -84,6 +84,29 @@ fn vectors_edges() {
                 let src = tx_ref(Transaction { version: 1, outputs: vec![Output::new(sats, lock)], ..Default::default() });
                 block_on(SimpleMultiBOLT::new().mint(key.clone(), &src, None)).map(|_| json!("minted"))
             }
+            "singleSpendSign" | "p2pkhUnlockSign" | "pay2ProofSign" => {
+                let (t, sats, lock) = edge_spend(&key, &s(0));
+                let b = t.borrow();
+                let tpl: Rc<dyn b017::boltlib::UnlockTemplate> = match fname {
+                    "singleSpendSign" => Rc::new(b017::singlespend::SingleSpendUnlock(b017::singlespend::SingleUnlockParams {
+                        signer: key.clone(),
+                        beneficiary_pub_key_hash: hash160(&key.public_key()),
+                        unlock_suffix: Script::from_hex(b017::suffixes_gen::MIN_SIMPLE_UNLOCK_SUFFIX_HEX).unwrap(),
+                        force_no_change: false,
+                        force_no_fund: false,
+                        prev_txs: vec![],
+                        source_satoshis: sats,
+                        locking_script: lock,
+                        leading_value_pushes: 0,
+                        layout: None,
+                        auth_or_misc_data: vec![],
+                        melt: false,
+                    })),
+                    "p2pkhUnlockSign" => Rc::new(P2PKHUnlock(key.clone())),
+                    _ => Rc::new(b017::pay2proof::Pay2ProofUnlock::new(key.clone(), sats.unwrap_or(0), lock)),
+                };
+                block_on(tpl.sign(&b, 0)).map(|x| json!(x.to_hex()))
+            }
             other => panic!("no Rust mapping for {other}"),
         };
         match (r.get("throws"), got) {
@@ -116,4 +139,81 @@ fn vectors_edges() {
         fails.len(),
         fails.join("\n")
     );
+}
+
+/// The crafted spends of edges.test.ts, by name: the tx and the sourceSatoshis / lockingScript overrides.
+fn edge_spend(key: &Rc<dyn Signer>, name: &str) -> (b017::TxRef, Option<u64>, Option<Script>) {
+    use b017::nfttemplates::{MinSimpleTemplate, NftLockArgs};
+    use b017::tx::Input;
+    let pkh = hash160(&key.public_key());
+    let lock_ms = MinSimpleTemplate::lock(&pkh, &key.public_key(), &NftLockArgs::default());
+    let out = || Output::new(1, p2pkh_lock(&pkh));
+    let empty = || Some(Script::default());
+    let with_src = |sats: Option<u64>| {
+        let s0 = tx_ref(Transaction {
+            version: 1,
+            outputs: vec![Output {
+                satoshis: sats,
+                locking_script: Some(lock_ms.clone()),
+                change: false,
+            }],
+            ..Default::default()
+        });
+        Transaction {
+            version: 2,
+            outputs: vec![out()],
+            inputs: vec![Input {
+                source_transaction: Some(s0),
+                unlocking_script: empty(),
+                sequence: Some(0xffff_ffff),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    };
+    let txid_only = || Transaction {
+        version: 2,
+        outputs: vec![out()],
+        inputs: vec![Input {
+            source_txid: Some("ef".repeat(32)),
+            unlocking_script: empty(),
+            sequence: Some(0xffff_ffff),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let (t, sats, lock) = match name {
+        "noRef" => (
+            Transaction {
+                version: 2,
+                outputs: vec![out()],
+                inputs: vec![Input {
+                    unlocking_script: empty(),
+                    sequence: Some(0xffff_ffff),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            None,
+            None,
+        ),
+        "txidOnly" => (txid_only(), None, None),
+        "txidOnlyWithAmount" => (txid_only(), Some(5), None),
+        "txidOnlyWithAmountAndLock" => (txid_only(), Some(5), Some(lock_ms.clone())),
+        "noAmount" => (with_src(None), None, None),
+        "zeroAmount" => (with_src(Some(0)), None, None),
+        "fundWithoutSource" => {
+            let mut t = with_src(Some(1));
+            t.inputs.push(Input {
+                source_txid: Some("aa".repeat(32)),
+                unlocking_script: empty(),
+                sequence: Some(0xffff_ffff),
+                ..Default::default()
+            });
+            t.outputs.push(out());
+            (t, None, None)
+        }
+        other => panic!("unknown edge spend {other}"),
+    };
+    (tx_ref(t), sats, lock)
 }

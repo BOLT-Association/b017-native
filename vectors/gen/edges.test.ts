@@ -9,6 +9,9 @@ import * as multi from 'C:/Users/honoh/Code/ChainBrowsers/b017/src/lib/multi/mul
 import * as single from 'C:/Users/honoh/Code/ChainBrowsers/b017/src/lib/single/singleAncestor.ts'
 import { recognizeType, recognizeP2P } from 'C:/Users/honoh/Code/ChainBrowsers/b017/src/lib/scanner/fingerprints.ts'
 import { isBeef, fromBeef } from 'C:/Users/honoh/Code/ChainBrowsers/b017/src/lib/scanner/beef.ts'
+import MinSimpleTemplate from 'C:/Users/honoh/Code/ChainBrowsers/b017/src/tokens/templates/MinSimple.sx.template.ts'
+import Pay2ProofTemplate from 'C:/Users/honoh/Code/ChainBrowsers/b017/src/tokens/templates/pay2Proof.ts'
+import { singleSpendUnlock } from 'C:/Users/honoh/Code/ChainBrowsers/b017/src/lib/single/singleSpend.ts'
 import SimpleMultiTemplate from 'C:/Users/honoh/Code/ChainBrowsers/b017/src/tokens/templates/SimpleMulti.sx.template.ts'
 import { SimpleMultiBOLT } from 'C:/Users/honoh/Code/ChainBrowsers/b017/src/tokens/MultiBOLT.ts'
 import { Graph } from './ser-plain.ts'
@@ -124,6 +127,33 @@ test('write edge vectors', async () => {
   await rec('mintNoMatchingOutput', [], () => new SimpleMultiBOLT().mint(key, new Transaction(1, [], [{ satoshis: 1000, lockingScript: new P2PKH().lock(new Array(20).fill(9)) }])).then(() => 'minted'))
   await rec('mintTooPoor', [], () => new SimpleMultiBOLT().mint(key, new Transaction(1, [], [{ satoshis: 0, lockingScript: new P2PKH().lock(pkh) }])).then(() => 'minted'))
   await rec('mintOddSource', [], () => new SimpleMultiBOLT().mint(key, new Transaction(1, [], [{ satoshis: 10, lockingScript: Script.fromHex('51') as any }])).then(() => 'minted'))
+
+  // template sign() error paths and overrides, on crafted spends
+  const ms = new MinSimpleTemplate()
+  const lockMs = ms.lock(pkh, pub)
+  const withSrc = (sats: any, lock: any) => {
+    const s0 = new Transaction(1, [], [{ satoshis: sats, lockingScript: lock } as any])
+    const t = new Transaction(2, [], [{ satoshis: 1, lockingScript: new P2PKH().lock(pkh) }])
+    t.addInput({ sourceTransaction: s0, sourceOutputIndex: 0, unlockingScript: UnlockingScript.fromHex(''), sequence: 0xffffffff })
+    return t
+  }
+  const noRef = new Transaction(2, [], [{ satoshis: 1, lockingScript: new P2PKH().lock(pkh) }])
+  ;(noRef.inputs as any).push({ sourceOutputIndex: 0, unlockingScript: UnlockingScript.fromHex(''), sequence: 0xffffffff })
+  const txidOnly = new Transaction(2, [], [{ satoshis: 1, lockingScript: new P2PKH().lock(pkh) }])
+  txidOnly.addInput({ sourceTXID: 'ef'.repeat(32), sourceOutputIndex: 0, unlockingScript: UnlockingScript.fromHex(''), sequence: 0xffffffff })
+  const unfundedSrc = withSrc(1, lockMs)
+  unfundedSrc.addInput({ sourceTXID: 'aa'.repeat(32), sourceOutputIndex: 0, unlockingScript: UnlockingScript.fromHex(''), sequence: 0xffffffff })
+  unfundedSrc.addOutput({ satoshis: 1, lockingScript: new P2PKH().lock(pkh) })
+  const cases: [string, Transaction, any][] = [
+    ['noRef', noRef, {}], ['txidOnly', txidOnly, {}], ['txidOnlyWithAmount', txidOnly, { sourceSatoshis: 5 }],
+    ['txidOnlyWithAmountAndLock', txidOnly, { sourceSatoshis: 5, lockingScript: lockMs }], ['noAmount', withSrc(undefined, lockMs), {}],
+    ['fundWithoutSource', unfundedSrc, {}], ['zeroAmount', withSrc(0, lockMs), {}],
+  ]
+  for (const [name, t, over] of cases) {
+    await rec('singleSpendSign', [name], () => singleSpendUnlock({ privateKey: key, beneficiaryPubKeyHash: pkh, unlockScriptSuffixASM: (ms as any).UNLOCK_SCRIPT_SUFFIX, ...over }).sign(t, 0).then((x) => x.toHex()))
+    await rec('p2pkhUnlockSign', [name], () => lib.p2pkhUnlock(key).sign(t, 0).then((x) => x.toHex()))
+    await rec('pay2ProofSign', [name], () => new Pay2ProofTemplate().unlock(key, over.sourceSatoshis, over.lockingScript).sign(t, 0).then((x) => x.toHex()))
+  }
 
   writeFileSync(`${ROOT}/edges.json`, JSON.stringify({ records: out, nodes: g.nodes }))
   console.log(`edges: ${out.length} records`)
