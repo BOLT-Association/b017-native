@@ -116,7 +116,10 @@ func (u *singleUnlocker) Sign(ctx context.Context, tx *Transaction, inputIndex i
 	if err != nil {
 		return nil, err
 	}
-	c := SplitCtx(pre, 2)
+	c, err := SplitCtx(pre, 2)
+	if err != nil {
+		return nil, err
+	}
 	ctxForSig := append(append(append(append([]byte{}, c.Header...), c.LockLen...), c.LockScriptCode...), c.Footer...)
 	sig, pub, err := CreateSignature(ctx, p.Signer, ctxForSig, SignatureScope)
 	if err != nil {

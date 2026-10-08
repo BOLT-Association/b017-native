@@ -565,7 +565,12 @@ func (b *Beef) IsAtomic(txid string) bool {
 
 // IsValid is `isValid(allowTxidOnly)` (verifyValid(...).valid). It sorts Txs, as the TS does. It returns an
 // error where the TS throws (a merkle path that cannot compute its root).
-func (b *Beef) IsValid(allowTxidOnly bool) (bool, error) {
+func (b *Beef) IsValid(allowTxidOnly bool) (ok bool, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			ok, err = false, panicError(r)
+		}
+	}()
 	if b.AtomicTxid != "" && !b.IsAtomic(b.AtomicTxid) {
 		return false, nil
 	}
@@ -786,7 +791,7 @@ func (b *Beef) toWriter(w *writer) error {
 			switch {
 			case t.IsTxidOnly():
 				w.b = append(w.b, txFormatTxidOnly)
-				w.bytes(reverse(jsHexToArray(t.txid)))
+				w.bytes(reverse(mustJSHex(t.txid)))
 			case t.bumpIndex != nil:
 				w.b = append(w.b, txFormatRawAndBump)
 				w.varint(uint64(*t.bumpIndex))
@@ -815,7 +820,12 @@ func (b *Beef) toWriter(w *writer) error {
 }
 
 // ToBinaryAtomic is `toBinaryAtomic(txid)`: the subject and its dependency closure, sorted, Atomic prefix.
-func (b *Beef) ToBinaryAtomic(txid string) ([]byte, error) {
+func (b *Beef) ToBinaryAtomic(txid string) (out []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			out, err = nil, panicError(r)
+		}
+	}()
 	byID := b.txIndex()
 	subject := byID[txid]
 	if subject == nil {
@@ -860,8 +870,8 @@ func (b *Beef) ToBinaryAtomic(txid string) ([]byte, error) {
 	if err := nb.toWriter(w); err != nil {
 		return nil, err
 	}
-	out := binary.LittleEndian.AppendUint32(nil, ATOMIC_BEEF)
-	out = append(out, reverse(jsHexToArray(txid))...)
+	out = binary.LittleEndian.AppendUint32(nil, ATOMIC_BEEF)
+	out = append(out, reverse(mustJSHex(txid))...)
 	return append(out, w.b...), nil
 }
 

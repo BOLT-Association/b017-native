@@ -174,7 +174,7 @@ impl SimpleMultiBOLT {
             }
         }
         let idx = match idx {
-            None => return err("Input 0 sourceOutputIndex must be a uint32"),
+            None => return err("Input 0 sourceOutputIndex must be an unsigned 32-bit integer."),
             Some(i) => i,
         };
         self.pub_key_hash = hash160(&pub_key);

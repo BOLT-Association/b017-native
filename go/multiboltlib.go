@@ -17,7 +17,7 @@ const (
 func readVarIntNum(b []byte, pos *int) uint64 {
 	need := func(n int) {
 		if *pos+n > len(b) {
-			panic(errors.New("Reader: not enough data"))
+			panic(errors.New("Reader read exceeds available data"))
 		}
 	}
 	need(1)

@@ -31,7 +31,12 @@ func IsBeef(x any) bool {
 
 // ToAtomicBeef is `toAtomicBeef`: tx and every attached source tx (with merkle paths where known), Atomic BEEF
 // over BEEF V2.
-func ToAtomicBeef(tx *Transaction) ([]byte, error) {
+func ToAtomicBeef(tx *Transaction) (out []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			out, err = nil, panicError(r)
+		}
+	}()
 	fillSourceTxids(tx, map[*Transaction]bool{})
 	beef := NewBeef(BEEF_V2)
 	if _, err := beef.MergeTransaction(tx); err != nil {
@@ -55,7 +60,11 @@ func FromBeef(input any) (tx *Transaction, err error) {
 	var bytes []byte
 	switch v := input.(type) {
 	case string:
-		bytes = jsHexToArray(v)
+		b, err := jsHexToArray(v)
+		if err != nil {
+			return nil, err
+		}
+		bytes = b
 	case []byte:
 		bytes = v
 	default:

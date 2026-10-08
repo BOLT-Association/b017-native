@@ -162,7 +162,10 @@ func (u *smbUnlocker) Sign(ctx context.Context, tx *Transaction, inputIndex int)
 	if err != nil {
 		return nil, err
 	}
-	c := SplitCtx(pre, 2)
+	c, err := SplitCtx(pre, 2)
+	if err != nil {
+		return nil, err
+	}
 	ctxForSig := append(append(append(append([]byte{}, c.Header...), c.LockLen...), c.LockScriptCode...), c.Footer...)
 	sig, pub, err := CreateSignature(ctx, u.signer, ctxForSig, SignatureScope)
 	if err != nil {

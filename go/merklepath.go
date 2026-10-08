@@ -55,7 +55,7 @@ func offsetTreeHeight(offset uint64) int {
 
 // hashPair is the reference's hashPair(left, right) on display-order hex.
 func hashPair(left, right string) string {
-	b := jsHexToArray(left + right)
+	b := mustJSHex(left + right)
 	return hex.EncodeToString(reverse(sha256d(reverse(b))))
 }
 
@@ -66,7 +66,11 @@ func MerklePathFromBinary(b []byte, legalOffsetsOnly bool) (*MerklePath, error) 
 
 // MerklePathFromHex is `MerklePath.fromHex`.
 func MerklePathFromHex(h string) (*MerklePath, error) {
-	return MerklePathFromBinary(jsHexToArray(h), true)
+	b, err := jsHexToArray(h)
+	if err != nil {
+		return nil, err
+	}
+	return MerklePathFromBinary(b, true)
 }
 
 func merklePathFromReader(r *reader, legalOffsetsOnly bool) (*MerklePath, error) {
@@ -115,7 +119,12 @@ func merklePathFromReader(r *reader, legalOffsetsOnly bool) (*MerklePath, error)
 }
 
 // NewMerklePath is the TS constructor with validateRoots = true.
-func NewMerklePath(blockHeight uint64, path [][]*Leaf, legalOffsetsOnly bool) (*MerklePath, error) {
+func NewMerklePath(blockHeight uint64, path [][]*Leaf, legalOffsetsOnly bool) (out *MerklePath, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			out, err = nil, panicError(r)
+		}
+	}()
 	if len(path) == 0 || len(path) > 54 {
 		return nil, errors.New("Merkle Path must contain between 1 and 54 levels")
 	}
@@ -199,7 +208,7 @@ func (mp *MerklePath) ToBinary() []byte {
 			}
 			w.b = append(w.b, flags)
 			if flags&1 == 0 {
-				w.bytes(reverse(jsHexToArray(leaf.Hash)))
+				w.bytes(reverse(mustJSHex(leaf.Hash)))
 			}
 		}
 	}
@@ -229,7 +238,12 @@ func (mp *MerklePath) maxOffset0() uint64 {
 }
 
 // ComputeRoot is `computeRoot(txid)`; an empty txid computes from the first leaf with a hash.
-func (mp *MerklePath) ComputeRoot(txid string) (string, error) {
+func (mp *MerklePath) ComputeRoot(txid string) (root string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			root, err = "", panicError(r)
+		}
+	}()
 	if txid == "" {
 		return mp.computeRoot(nil)
 	}

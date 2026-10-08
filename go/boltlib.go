@@ -89,9 +89,10 @@ type Ctx struct {
 }
 
 // SplitCtx is `splitCtx`: header(104) + scriptCodeLen + unlockScriptCode(unlockBytesLen) + lockScriptCode +
-// footer(52) + varint(len lockScriptCode).
-func SplitCtx(ctx []byte, unlockBytesLen int) Ctx {
-	sl := func(a, b int) []byte { // JS slice: clamped, never panics
+// footer(52) + varint(len lockScriptCode). Like the TS (a Reader at 104), it fails when the length prefix is
+// not there to read.
+func SplitCtx(ctx []byte, unlockBytesLen int) (Ctx, error) {
+	sl := func(a, b int) []byte { // JS slice: clamped
 		if a > len(ctx) {
 			a = len(ctx)
 		}
@@ -103,11 +104,11 @@ func SplitCtx(ctx []byte, unlockBytesLen int) Ctx {
 		}
 		return clone(ctx[a:b])
 	}
-	header := sl(0, 104)
-	first := 0
-	if len(ctx) > 104 {
-		first = int(ctx[104])
+	if len(ctx) <= 104 {
+		return Ctx{}, errors.New("Reader position exceeds available data")
 	}
+	header := sl(0, 104)
+	first := int(ctx[104])
 	lenSize := 1
 	switch first {
 	case 0xfd:
@@ -120,20 +121,16 @@ func SplitCtx(ctx []byte, unlockBytesLen int) Ctx {
 	codeLen := sl(104, 104+lenSize)
 	offset := 104 + lenSize
 	actual := first
-	at := sl(105, 105+8)
+	if lenSize > 1 && 105+lenSize-1 > len(ctx) {
+		return Ctx{}, errors.New("Reader read exceeds available data")
+	}
 	switch first {
 	case 0xfd:
-		if len(at) >= 2 {
-			actual = int(binary.LittleEndian.Uint16(at))
-		}
+		actual = int(binary.LittleEndian.Uint16(ctx[105:107]))
 	case 0xfe:
-		if len(at) >= 4 {
-			actual = int(binary.LittleEndian.Uint32(at))
-		}
+		actual = int(binary.LittleEndian.Uint32(ctx[105:109]))
 	case 0xff:
-		if len(at) >= 8 {
-			actual = int(binary.LittleEndian.Uint64(at))
-		}
+		actual = int(binary.LittleEndian.Uint64(ctx[105:113]))
 	}
 	code := sl(offset, offset+actual)
 	offset += actual
@@ -145,7 +142,7 @@ func SplitCtx(ctx []byte, unlockBytesLen int) Ctx {
 	lock := clone(code[n:])
 	footer := sl(offset, offset+52)
 	return Ctx{Header: header, CodeLen: codeLen, UnlockScriptCode: unlock, LockScriptCode: lock, Footer: footer,
-		LockLen: varintBytes(uint64(len(lock)))}
+		LockLen: varintBytes(uint64(len(lock)))}, nil
 }
 
 func le32(n uint32) []byte { return binary.LittleEndian.AppendUint32(nil, n) }
@@ -166,11 +163,7 @@ func SpentOutpoint(tx *Transaction, vin int) []byte {
 	if in.SourceTransaction != nil {
 		txid = in.SourceTransaction.MustHash()
 	} else {
-		b, err := hex.DecodeString(in.SourceTXID)
-		if err != nil {
-			b = jsHexToArray(in.SourceTXID)
-		}
-		txid = reverse(b)
+		txid = reverse(mustJSHex(in.SourceTXID))
 	}
 	if len(txid) == 0 {
 		return []byte{}
@@ -178,20 +171,27 @@ func SpentOutpoint(tx *Transaction, vin int) []byte {
 	return append(clone(txid), le32(in.SourceOutputIndex)...)
 }
 
-// jsHexToArray is Utils.toArray(str, 'hex') for a malformed string: pairs parsed with parseInt, NaN -> 0.
-func jsHexToArray(s string) []byte {
+// jsHexToArray is Utils.toArray(str, 'hex'): "Invalid hex string" for a non-hex character, a leading 0 for an
+// odd length.
+func jsHexToArray(s string) ([]byte, error) {
 	if len(s)%2 != 0 {
 		s = "0" + s
 	}
-	out := make([]byte, 0, len(s)/2)
-	for i := 0; i+1 < len(s); i += 2 {
-		var v byte
-		if b, err := hex.DecodeString(s[i : i+2]); err == nil {
-			v = b[0]
-		}
-		out = append(out, v)
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return nil, errors.New("Invalid hex string")
 	}
-	return out
+	return b, nil
+}
+
+// mustJSHex is jsHexToArray where the TS would throw: it panics with the error (recovered into the caller's
+// error, as the TS throw propagates).
+func mustJSHex(s string) []byte {
+	b, err := jsHexToArray(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // VinChunk is `vinChunk`: data of input vin's unlocking chunk, or [].

@@ -96,7 +96,7 @@ func (b *SimpleMultiBOLT) Mint(ctx context.Context, owner Signer, sourceTransact
 		}
 	}
 	if sourceOutputIndex < 0 {
-		return nil, errors.New("Input 0 sourceOutputIndex must be a uint32")
+		return nil, errors.New("Input 0 sourceOutputIndex must be an unsigned 32-bit integer.")
 	}
 	b.PubKeyHash = Hash160(pubKey)
 	b.Balance = balance
