@@ -1,0 +1,18 @@
+[package]
+name = "b017"
+version = "0.0.0-b2"
+edition = "2021"
+rust-version = "1.87"
+description = "b017 - BOLT layer-1 token templates and off-chain scanner, transcribed from the TypeScript reference"
+license-file = "../LICENSE.txt"
+publish = false
+
+[lib]
+name = "b017"
+
+[dependencies]
+# Patched in third_party (OP_CHECKSIG subscript across the unlock/lock boundary); see third_party/setup.sh.
+bsv-sdk = { path = "../third_party/bsv-rust-sdk" }
+
+[dev-dependencies]
+serde_json = "1"
