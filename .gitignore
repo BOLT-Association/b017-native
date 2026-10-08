@@ -1,0 +1,7 @@
+vectors/raw/
+vectors/gen/.cache/
+vectors/gen/node_modules/
+third_party/bsv-rust-sdk/
+rust/target/
+target/
+.claude/

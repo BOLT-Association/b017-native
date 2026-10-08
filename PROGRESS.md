@@ -1,0 +1,69 @@
+# b017-native: progress log
+
+Plan: `C:/Users/honoh/.claude/plans/https-claude-ai-artifact-6nautc1rbkcsv9a-sequential-whisper.md`.
+Reference: `../b017` (branch `async-signer`, commit `a305f58`), read-only. Its `@bsv/sdk` is 2.8.11.
+
+## Status
+
+| Phase | State |
+|---|---|
+| 0 vectors + Rust SDK fix | vectors recorded and packed; SDK fix committed locally (patch in `third_party/patches`) |
+| 1 primitives | not started |
+| 2 NFT path | not started |
+| 3 scanner | not started |
+| 4 fungible | not started |
+| 5 hardening + p2p adapter | not started |
+
+## Vectors (Phase 0)
+
+- `vectors/gen/vitest.record.config.mjs` runs b017's own suite (35 files, 629 tests, all pass) with
+  `record.setup.ts`, which wraps the reference's entry points through `vi.mock` / prototype patches and writes
+  every call to `vectors/raw/calls.jsonl` (gitignored, ~315 MB). `pack.mjs` de-duplicates it into
+  `vectors/nodes.json` (913 content-addressed tx nodes) and `vectors/calls/<kind>.json`.
+- Recorded kinds (distinct calls): verifyEvents 261, verifyEvent 102, verifyAndBroadcast 76, verifyTx 379,
+  fromBeef 63, toAtomicBeef 46, lock.{MinSimple 61, AuthBolt 81, SimpleMulti 136, Pay2Proof 49},
+  sign.{MinSimple 82, AuthBolt 142, SimpleMulti 141, Pay2Proof 56, p2pkhUnlock 132}, template.AuthBolt 1.
+- Every Signer seen in a sign() call is backed by a recorded private key (`KEYS`, from patching
+  `PrivateKey.prototype.toPublicKey`), so every recorded signature can be reproduced.
+- `vectors/static.json` (`vitest.static.config.mjs` + `static.test.ts`): lock/unlock suffix hex for the 3
+  contracts, REGISTRY, piece names, p2Proof reference lock, constants.
+
+Regenerate (from `../b017`):
+```
+B017_VECTORS_OUT=C:/Users/honoh/Code/ChainBrowsers/b017-native/vectors/raw/calls.jsonl \
+  node node_modules/vitest/vitest.mjs run --config C:/Users/honoh/Code/ChainBrowsers/b017-native/vectors/gen/vitest.record.config.mjs
+node node_modules/vitest/vitest.mjs run --config C:/Users/honoh/Code/ChainBrowsers/b017-native/vectors/gen/vitest.static.config.mjs
+cd ../b017-native && node vectors/gen/pack.mjs
+```
+
+## Decisions
+
+- **Tx node format** (`vectors/gen/ser.ts`): `{v, lt, ins:[{txid, vout, seq, us, src}], outs:[{sat, ls}], mp}`,
+  nulls for absent fields; `src` is another node id. This carries what hex cannot: an input with an attached
+  source but no `sourceTXID`, a missing unlocking script, an attached source that is not the tx its outpoint
+  names. Node id = first 32 hex of sha256(JSON).
+- **Reasons:** text b017 writes itself must match exactly. Where a reason ends in an SDK's own error text (the
+  tail after `script execution failed: tx … input …: `, `malformed transaction hex: `, `invalid BEEF: ` when the
+  inner error is not one of b017's four BEEF errors, `unverifiable input: `, and a merkle path error inside
+  `its merkle path does not prove it (…)`), only the b017 prefix is compared: three SDKs word their internals
+  differently. `"the script evaluated false"` and `"no unlocking script"` are b017's and compared exactly.
+- **Random keys:** a few reference tests use `PrivateKey.fromRandom`, so a re-recording differs byte-wise from the
+  committed vectors. CI therefore re-records and runs the ports on the fresh set; it does not diff the files.
+- **Rust SDK:** `b1narydt/bsv-rust-sdk` 0.8.1 (what crates.io publishes as `bsv-sdk`), base in
+  `third_party/patches/BASE`, fix in `0001-…patch`, applied by `third_party/setup.sh` on local branch
+  `b017-codesep`. The fix: `get_subscript` takes the subscript from the running script, and for CHECKSIG taken
+  in the unlocking script continues into the whole locking script (ts-sdk `Spend.js` ~L1518, go-sdk
+  `thread.subScript` after Chronicle). The crate's own 181 `script::` tests pass with it.
+- go-sdk v1.7.1 requires `go 1.26.0`; local Go is 1.25.3, so the toolchain directive downloads 1.26 on first build.
+
+## For the user (prepared, not done: no pushes, repos, forks, PRs or issues were created)
+
+1. Create `BOLT-Association/b017-native` and push this repo.
+2. Fork `b1narydt/bsv-rust-sdk` to `BOLT-Association/bsv-rust-sdk`, push branch `b017-codesep`, open the PR
+   upstream with `third_party/patches/0001-…patch`, and file an issue on `bsv-blockchain/rs-sdk` (same bug:
+   `src/script/spend_ops.rs` `get_subscript`).
+
+## Next
+
+Phase 1: Go module (`go/`), primitives + BEEF + fingerprints, and the replay harness that loads
+`vectors/nodes.json` into go-sdk transactions.
