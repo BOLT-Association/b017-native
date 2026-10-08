@@ -123,8 +123,8 @@ The plan asked for b017's floor (99% statements). Measured and accepted as enoug
 
 ## Published (at the user's request, 2026-10-08)
 
-1. This repo: https://github.com/BOLT-Association/b017-native (public). Local `main` is ahead by
-   the CI fix (`fec9048`: `git am` identity, no checkout token) and this log; not pushed, waiting for the user.
+1. This repo: https://github.com/BOLT-Association/b017-native (public). Pushed; CI (go, rust,
+   vectors re-recorded from b017 and replayed) is green.
 2. Rust SDK fork https://github.com/BOLT-Association/bsv-rust-sdk, branch `spend-ts-sdk-parity`
    (= `third_party/patches`); upstream PR https://github.com/b1narydt/bsv-rust-sdk/pull/57.
 3. go-sdk: no fork or PR needed (fixed upstream).
