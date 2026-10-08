@@ -42,7 +42,7 @@ jobs:
   vectors:
     runs-on: ubuntu-latest
     env:
-      B017_REF: a305f58
+      B017_REF: a305f5898fe6393a90b3de169ad77c51f6ecd20e
     steps:
       - uses: actions/checkout@v4
         with:
