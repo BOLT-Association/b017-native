@@ -134,59 +134,59 @@ func TestVectorsBeef(t *testing.T) {
 	}
 }
 
-// replaySign signs the recorded tx state with the template the record names and compares the unlocking script.
-func replaySign(t *testing.T, name string, build func(t *testing.T, g *graph, args []arg) (UnlockTemplate, error)) {
-	for i, rec := range loadCalls(t, name) {
-		t.Run(label(rec, i), func(t *testing.T) {
-			g := newGraph(t)
-			var args []arg
-			_ = json.Unmarshal(rec["args"], &args)
-			var id string
-			_ = json.Unmarshal(rec["tx"], &id)
-			var idx int
-			_ = json.Unmarshal(rec["inputIndex"], &idx)
-			tpl, err := build(t, g, args)
-			var us *Script
-			if err == nil {
-				us, err = tpl.Sign(context.Background(), g.tx(id), idx)
-			}
-			if want, threw := rec["throws"]; threw {
-				if err == nil {
-					t.Fatalf("TS threw %q, Go succeeded", str(want))
-				}
-				if isB017Error(str(want)) && err.Error() != str(want) {
-					t.Fatalf("error %q, want %q", err, str(want))
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Go error: %v", err)
-			}
-			if got := us.ToHex(); got != str(rec["result"]) {
-				t.Fatalf("unlocking script differs\n got %s\nwant %s", got, str(rec["result"]))
-			}
-		})
-	}
-}
-
-func TestVectorsSignP2PKH(t *testing.T) {
-	replaySign(t, "sign.p2pkhUnlock", func(t *testing.T, g *graph, args []arg) (UnlockTemplate, error) {
+// signBuilders build the template a recorded sign() call used, from the recorded method and arguments.
+var signBuilders = map[string]func(t *testing.T, g *graph, method string, args []arg) (UnlockTemplate, error){
+	"sign.p2pkhUnlock": func(t *testing.T, g *graph, method string, args []arg) (UnlockTemplate, error) {
 		return P2PKHUnlock(args[0].signer(t)), nil
-	})
-}
-
-func TestVectorsSignPay2Proof(t *testing.T) {
-	replaySign(t, "sign.Pay2Proof", func(t *testing.T, g *graph, args []arg) (UnlockTemplate, error) {
+	},
+	"sign.Pay2Proof": func(t *testing.T, g *graph, method string, args []arg) (UnlockTemplate, error) {
 		var sats uint64
 		var lock *Script
-		if len(args) > 1 && args[1].T == "json" {
-			sats = args[1].number()
+		if a := argAt(args, 1); a.T == "json" {
+			sats = a.number()
 		}
-		if len(args) > 2 && args[2].T == "script" {
-			lock = MustScriptFromHex(args[2].Hex)
+		if a := argAt(args, 2); a.T == "script" {
+			lock = MustScriptFromHex(a.Hex)
 		}
 		return Pay2ProofUnlock(args[0].signer(t), sats, lock), nil
-	})
+	},
+}
+
+// TestVectorsSign signs each recorded tx state with the recorded template and compares the unlocking script.
+func TestVectorsSign(t *testing.T) {
+	for name, build := range signBuilders {
+		for i, rec := range loadCalls(t, name) {
+			t.Run(name+" "+label(rec, i), func(t *testing.T) {
+				g := newGraph(t)
+				var args []arg
+				_ = json.Unmarshal(rec["args"], &args)
+				var id string
+				_ = json.Unmarshal(rec["tx"], &id)
+				var idx int
+				_ = json.Unmarshal(rec["inputIndex"], &idx)
+				tpl, err := build(t, g, str(rec["method"]), args)
+				var us *Script
+				if err == nil {
+					us, err = tpl.Sign(context.Background(), g.tx(id), idx)
+				}
+				if want, threw := rec["throws"]; threw {
+					if err == nil {
+						t.Fatalf("TS threw %q, Go succeeded", str(want))
+					}
+					if isB017Error(str(want)) && err.Error() != str(want) {
+						t.Fatalf("error %q, want %q", err, str(want))
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("Go error: %v", err)
+				}
+				if got := us.ToHex(); got != str(rec["result"]) {
+					t.Fatalf("unlocking script differs\n got %s\nwant %s", got, str(rec["result"]))
+				}
+			})
+		}
+	}
 }
 
 func TestVectorsLockPay2Proof(t *testing.T) {
