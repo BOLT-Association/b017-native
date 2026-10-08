@@ -1,6 +1,9 @@
 //! src/lib/multi/multiBoltLib.ts: SimpleMultiBolt ancestor reconstruction and CTX helpers (Go: multiboltlib.go).
 
-use crate::boltlib::{output_script, output_value, spent_outpoint, tx_lock_time, tx_version, vin_chunk, vin_script, vin_sequence, vout_chunk};
+use crate::boltlib::{
+    output_script, output_value, spent_outpoint, tx_lock_time, tx_version, vin_chunk, vin_script,
+    vin_sequence, vout_chunk,
+};
 use crate::error::Result;
 use crate::script::{chunks_from_bin, Chunk, Script};
 use crate::singlespend::empty_single_ancestor_chunks;
@@ -71,71 +74,156 @@ fn get_vin_ctx_data_arg(tx: &Transaction, vin: usize, arg_idx: usize) -> Result<
 /// determineTxTypeSMB: `(data[0] || -1).toString(16)`.
 fn determine_tx_type(tx: &Transaction) -> Result<String> {
     let first = match tx.outputs.first() {
-        None => return crate::error::err("Cannot read properties of undefined (reading 'lockingScript')"),
+        None => {
+            return crate::error::err(
+                "Cannot read properties of undefined (reading 'lockingScript')",
+            )
+        }
         Some(o) => o,
     };
-    let c = first.locking_script.as_ref().map(|s| s.chunks().to_vec()).unwrap_or_default();
-    Ok(match c.get(TXO_TYPE_IDX_SMB).and_then(|x| x.data.as_ref()).and_then(|d| d.first()) {
-        Some(&b) if b != 0 => format!("{b:x}"),
-        _ => "-1".into(),
-    })
+    let c = first
+        .locking_script
+        .as_ref()
+        .map(|s| s.chunks().to_vec())
+        .unwrap_or_default();
+    Ok(
+        match c
+            .get(TXO_TYPE_IDX_SMB)
+            .and_then(|x| x.data.as_ref())
+            .and_then(|d| d.first())
+        {
+            Some(&b) if b != 0 => format!("{b:x}"),
+            _ => "-1".into(),
+        },
+    )
 }
 
 /// The 89 SimpleMultiBolt ancestor piece names per ancestor.
 pub const SMB_PIECE_NAMES: [&str; 89] = [
     "Version",
     "Vin1Outpoint",
-    "Vin1GrandparentProofVoutIdx", "Vin1InteropProofVoutIdx",
-    "Vin1InteropPubKeyHash", "Vin1InteropOutpoint", "Vin1InteropParentOutpoint",
-    "Vin1FundOutpoint", "Vin1ChangeOutput",
-    "Vin1PubKeyHash1", "Vin1PubKeyHash2", "Vin1NextBalanceCommit", "Vin1NextTxoType", "Vin1InputIndexN",
-    "Vin1Sig", "Vin1PubKey",
-    "Vin1CTXHeader", "Vin1CTXBalance", "Vin1CTXBalanceCommit",
-    "Vin1CTXPubKeyHash", "Vin1CTXPubKeyHashCommit", "Vin1CTXPubKeyHashCommit2",
+    "Vin1GrandparentProofVoutIdx",
+    "Vin1InteropProofVoutIdx",
+    "Vin1InteropPubKeyHash",
+    "Vin1InteropOutpoint",
+    "Vin1InteropParentOutpoint",
+    "Vin1FundOutpoint",
+    "Vin1ChangeOutput",
+    "Vin1PubKeyHash1",
+    "Vin1PubKeyHash2",
+    "Vin1NextBalanceCommit",
+    "Vin1NextTxoType",
+    "Vin1InputIndexN",
+    "Vin1Sig",
+    "Vin1PubKey",
+    "Vin1CTXHeader",
+    "Vin1CTXBalance",
+    "Vin1CTXBalanceCommit",
+    "Vin1CTXPubKeyHash",
+    "Vin1CTXPubKeyHashCommit",
+    "Vin1CTXPubKeyHashCommit2",
     "Vin1CTXOtherGrandparentOutpoint",
-    "Vin1CTXTxoType", "Vin1CTXOutputIndexN",
-    "Vin1CTXParentOutpoint", "Vin1CTXGrandparentOutpoint", "Vin1CTXIssuerPubKey",
-    "Vin1CTXFooter", "Vin1NSequence",
+    "Vin1CTXTxoType",
+    "Vin1CTXOutputIndexN",
+    "Vin1CTXParentOutpoint",
+    "Vin1CTXGrandparentOutpoint",
+    "Vin1CTXIssuerPubKey",
+    "Vin1CTXFooter",
+    "Vin1NSequence",
     "Vin2Outpoint",
-    "Vin2GrandparentProofVoutIdx", "Vin2InteropProofVoutIdx",
-    "Vin2InteropPubKeyHash", "Vin2InteropOutpoint", "Vin2InteropParentOutpoint",
-    "Vin2FundOutpoint", "Vin2ChangeOutput",
-    "Vin2PubKeyHash1", "Vin2PubKeyHash2", "Vin2NextBalanceCommit", "Vin2NextTxoType", "Vin2InputIndexN",
-    "Vin2Sig", "Vin2PubKey",
-    "Vin2CTXHeader", "Vin2CTXBalance", "Vin2CTXBalanceCommit",
-    "Vin2CTXPubKeyHash", "Vin2CTXPubKeyHashCommit", "Vin2CTXPubKeyHashCommit2",
+    "Vin2GrandparentProofVoutIdx",
+    "Vin2InteropProofVoutIdx",
+    "Vin2InteropPubKeyHash",
+    "Vin2InteropOutpoint",
+    "Vin2InteropParentOutpoint",
+    "Vin2FundOutpoint",
+    "Vin2ChangeOutput",
+    "Vin2PubKeyHash1",
+    "Vin2PubKeyHash2",
+    "Vin2NextBalanceCommit",
+    "Vin2NextTxoType",
+    "Vin2InputIndexN",
+    "Vin2Sig",
+    "Vin2PubKey",
+    "Vin2CTXHeader",
+    "Vin2CTXBalance",
+    "Vin2CTXBalanceCommit",
+    "Vin2CTXPubKeyHash",
+    "Vin2CTXPubKeyHashCommit",
+    "Vin2CTXPubKeyHashCommit2",
     "Vin2CTXOtherGrandparentOutpoint",
-    "Vin2CTXTxoType", "Vin2CTXOutputIndexN",
-    "Vin2CTXParentOutpoint", "Vin2CTXGrandparentOutpoint", "Vin2CTXIssuerPubKey",
-    "Vin2CTXFooter", "Vin2NSequence",
-    "VinFundOutpoint", "VinFundScript", "VinFundNSequence",
-    "Vout1Balance", "Vout1BalanceCommit",
-    "Vout1PubKeyHash", "Vout1PubKeyHashCommit", "Vout1PubKeyHashCommit2",
+    "Vin2CTXTxoType",
+    "Vin2CTXOutputIndexN",
+    "Vin2CTXParentOutpoint",
+    "Vin2CTXGrandparentOutpoint",
+    "Vin2CTXIssuerPubKey",
+    "Vin2CTXFooter",
+    "Vin2NSequence",
+    "VinFundOutpoint",
+    "VinFundScript",
+    "VinFundNSequence",
+    "Vout1Balance",
+    "Vout1BalanceCommit",
+    "Vout1PubKeyHash",
+    "Vout1PubKeyHashCommit",
+    "Vout1PubKeyHashCommit2",
     "Vout1OtherGrandparentOutpoint",
-    "Vout1TxoType", "Vout1OutputIndexN",
-    "Vout1ParentOutpoint", "Vout1GrandparentOutpoint", "Vout1IssuerPubKey",
-    "Vout2Balance", "Vout2BalanceCommit",
-    "Vout2PubKeyHash", "Vout2PubKeyHashCommit", "Vout2PubKeyHashCommit2",
+    "Vout1TxoType",
+    "Vout1OutputIndexN",
+    "Vout1ParentOutpoint",
+    "Vout1GrandparentOutpoint",
+    "Vout1IssuerPubKey",
+    "Vout2Balance",
+    "Vout2BalanceCommit",
+    "Vout2PubKeyHash",
+    "Vout2PubKeyHashCommit",
+    "Vout2PubKeyHashCommit2",
     "Vout2OtherGrandparentOutpoint",
-    "Vout2TxoType", "Vout2OutputIndexN",
-    "Vout2ParentOutpoint", "Vout2GrandparentOutpoint", "Vout2IssuerPubKey",
-    "ProofPubKeyHash1", "ProofPubKeyHash2",
-    "ChangeValue", "ChangeScript", "NLockTime",
+    "Vout2TxoType",
+    "Vout2OutputIndexN",
+    "Vout2ParentOutpoint",
+    "Vout2GrandparentOutpoint",
+    "Vout2IssuerPubKey",
+    "ProofPubKeyHash1",
+    "ProofPubKeyHash2",
+    "ChangeValue",
+    "ChangeScript",
+    "NLockTime",
 ];
 
 fn vin_offset(rest: &str) -> Option<usize> {
     [
-        "GrandparentProofVoutIdx", "InteropProofVoutIdx", "InteropPubKeyHash", "InteropOutpoint", "InteropParentOutpoint",
-        "FundOutpoint", "ChangeOutput", "PubKeyHash1", "PubKeyHash2", "NextBalanceCommit", "NextTxoType", "InputIndexN",
-        "Sig", "PubKey",
+        "GrandparentProofVoutIdx",
+        "InteropProofVoutIdx",
+        "InteropPubKeyHash",
+        "InteropOutpoint",
+        "InteropParentOutpoint",
+        "FundOutpoint",
+        "ChangeOutput",
+        "PubKeyHash1",
+        "PubKeyHash2",
+        "NextBalanceCommit",
+        "NextTxoType",
+        "InputIndexN",
+        "Sig",
+        "PubKey",
     ]
     .iter()
     .position(|&x| x == rest)
 }
 
 const LOCK_ARGS: [&str; 11] = [
-    "Balance", "BalanceCommit", "PubKeyHash", "PubKeyHashCommit", "PubKeyHashCommit2", "OtherGrandparentOutpoint",
-    "TxoType", "OutputIndexN", "ParentOutpoint", "GrandparentOutpoint", "IssuerPubKey",
+    "Balance",
+    "BalanceCommit",
+    "PubKeyHash",
+    "PubKeyHashCommit",
+    "PubKeyHashCommit2",
+    "OtherGrandparentOutpoint",
+    "TxoType",
+    "OutputIndexN",
+    "ParentOutpoint",
+    "GrandparentOutpoint",
+    "IssuerPubKey",
 ];
 
 fn lock_arg(rest: &str) -> Option<usize> {
@@ -149,7 +237,11 @@ pub fn smb_ancestor_piece(name: &str, tx: &Transaction) -> Result<Vec<u8>> {
     let two_bolts = tt == "23";
     let fund_vin = tx.inputs.len().wrapping_sub(1);
     let change_vout = tx.outputs.len().wrapping_sub(1);
-    let has_change = tx.outputs.get(change_vout).and_then(|o| o.locking_script.as_ref()).is_some_and(|s| s.chunks().len() == 5);
+    let has_change = tx
+        .outputs
+        .get(change_vout)
+        .and_then(|o| o.locking_script.as_ref())
+        .is_some_and(|s| s.chunks().len() == 5);
     let has_funding = tx.inputs.len() > if two_token_inputs { 2 } else { 1 };
     let vin_piece = |vin: usize, rest: &str| -> Result<Vec<u8>> {
         Ok(match rest {
@@ -175,7 +267,11 @@ pub fn smb_ancestor_piece(name: &str, tx: &Transaction) -> Result<Vec<u8>> {
         return vin_piece(0, rest);
     }
     if let Some(rest) = name.strip_prefix("Vin2") {
-        return if two_token_inputs { vin_piece(1, rest) } else { Ok(vec![]) };
+        return if two_token_inputs {
+            vin_piece(1, rest)
+        } else {
+            Ok(vec![])
+        };
     }
     Ok(match name {
         "VinFundOutpoint" if has_funding => spent_outpoint(tx, fund_vin)?,

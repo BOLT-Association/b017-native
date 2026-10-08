@@ -3,10 +3,15 @@
 
 use std::rc::Rc;
 
-use crate::boltlib::{build_change_output, build_outpoint, create_signature, input_source_txid, split_ctx, UnlockTemplate};
+use crate::boltlib::{
+    build_change_output, build_outpoint, create_signature, input_source_txid, split_ctx,
+    UnlockTemplate,
+};
 use crate::error::{err, Result};
 use crate::script::{chunks_from_bin, ocs_prefix, Chunk, Script};
-use crate::sighash::{format_preimage, refs_of, BoxFuture, PreimageParams, Signer, SIGNATURE_SCOPE};
+use crate::sighash::{
+    format_preimage, refs_of, BoxFuture, PreimageParams, Signer, SIGNATURE_SCOPE,
+};
 use crate::singleancestor::{min_simple_layout, single_ancestor_pieces, SingleLayout};
 use crate::tx::{Transaction, TxRef};
 
@@ -14,7 +19,9 @@ use crate::tx::{Transaction, TxRef};
 pub const SINGLE_ANCESTOR_ARG_COUNT: usize = 26;
 
 pub(crate) fn is_proof_lock(s: Option<&Script>) -> bool {
-    s.and_then(|s| s.chunks().first()).and_then(|c| c.data.as_ref()).is_some_and(|d| d.len() == 2 && d[0] == 0xb0 && d[1] == 0x17)
+    s.and_then(|s| s.chunks().first())
+        .and_then(|c| c.data.as_ref())
+        .is_some_and(|d| d.len() == 2 && d[0] == 0xb0 && d[1] == 0x17)
 }
 
 /// `emptySingleAncestorChunks(count)`.
@@ -46,7 +53,11 @@ impl UnlockTemplate for SingleSpendUnlock {
     fn estimate_length(&self) -> usize {
         2000
     }
-    fn sign<'a>(&'a self, tx: &'a Transaction, input_index: usize) -> BoxFuture<'a, Result<Script>> {
+    fn sign<'a>(
+        &'a self,
+        tx: &'a Transaction,
+        input_index: usize,
+    ) -> BoxFuture<'a, Result<Script>> {
         Box::pin(async move {
             let p = &self.0;
             let layout = p.layout.clone().unwrap_or_else(min_simple_layout);
@@ -55,16 +66,28 @@ impl UnlockTemplate for SingleSpendUnlock {
             if source_txid.is_empty() {
                 return err("input sourceTXID or sourceTransaction required for signing");
             }
-            let src_out = input.source_transaction.as_ref().map(|s| s.borrow().outputs.get(input.source_output_index as usize).cloned());
+            let src_out = input.source_transaction.as_ref().map(|s| {
+                s.borrow()
+                    .outputs
+                    .get(input.source_output_index as usize)
+                    .cloned()
+            });
             if let Some(None) = src_out {
                 return err("Cannot read properties of undefined (reading 'satoshis')");
             }
             let src_out = src_out.flatten();
-            let sats = match p.source_satoshis.or_else(|| src_out.as_ref().and_then(|o| o.satoshis)) {
+            let sats = match p
+                .source_satoshis
+                .or_else(|| src_out.as_ref().and_then(|o| o.satoshis))
+            {
                 Some(s) => s,
                 None => return err("sourceSatoshis or input sourceTransaction required"),
             };
-            let lock = match p.locking_script.clone().or_else(|| src_out.as_ref().and_then(|o| o.locking_script.clone())) {
+            let lock = match p
+                .locking_script
+                .clone()
+                .or_else(|| src_out.as_ref().and_then(|o| o.locking_script.clone()))
+            {
                 Some(l) => l,
                 None => return err("lockingScript or input sourceTransaction required"),
             };
@@ -74,7 +97,10 @@ impl UnlockTemplate for SingleSpendUnlock {
             let has_ancestor = ancestor_idx >= 1 && tx_idx >= 4 && tx_idx % 2 == 0;
             let ancestor_chunks: Vec<Chunk> = if has_ancestor {
                 let anc = p.prev_txs[ancestor_idx as usize].borrow();
-                single_ancestor_pieces(&anc, p.leading_value_pushes, &layout)?.iter().flat_map(|b| chunks_from_bin(b)).collect()
+                single_ancestor_pieces(&anc, p.leading_value_pushes, &layout)?
+                    .iter()
+                    .flat_map(|b| chunks_from_bin(b))
+                    .collect()
             } else {
                 empty_single_ancestor_chunks(layout.piece_names.len())
             };
@@ -100,7 +126,8 @@ impl UnlockTemplate for SingleSpendUnlock {
             ctx_for_sig.extend(&c.lock_len);
             ctx_for_sig.extend(&c.lock_script_code);
             ctx_for_sig.extend(&c.footer);
-            let (sig, pub_key) = create_signature(p.signer.as_ref(), &ctx_for_sig, SIGNATURE_SCOPE).await?;
+            let (sig, pub_key) =
+                create_signature(p.signer.as_ref(), &ctx_for_sig, SIGNATURE_SCOPE).await?;
             let suffix = p.unlock_suffix.chunks().to_vec();
 
             if p.melt {
@@ -122,7 +149,9 @@ impl UnlockTemplate for SingleSpendUnlock {
             }
 
             let next_in = tx.inputs.get(input_index + 1);
-            let next_lock = next_in.and_then(|i| i.source_output()).and_then(|o| o.locking_script);
+            let next_lock = next_in
+                .and_then(|i| i.source_output())
+                .and_then(|o| o.locking_script);
             let has_proof = match next_in {
                 None => false,
                 Some(_) => match &next_lock {
@@ -130,11 +159,22 @@ impl UnlockTemplate for SingleSpendUnlock {
                     None => has_ancestor,
                 },
             };
-            let fund_input = if p.force_no_fund { None } else { tx.inputs.get(input_index + 1 + usize::from(has_proof)) };
-            let change_idx = if is_proof_lock(tx.outputs.get(1).and_then(|o| o.locking_script.as_ref())) { 2 } else { 1 };
+            let fund_input = if p.force_no_fund {
+                None
+            } else {
+                tx.inputs.get(input_index + 1 + usize::from(has_proof))
+            };
+            let change_idx =
+                if is_proof_lock(tx.outputs.get(1).and_then(|o| o.locking_script.as_ref())) {
+                    2
+                } else {
+                    1
+                };
             let has_change = !p.force_no_change && tx.outputs.len() > change_idx;
             if has_change && fund_input.is_none() {
-                return err("an unfunded spend has no change to return (change needs a funding input)");
+                return err(
+                    "an unfunded spend has no change to return (change needs a funding input)",
+                );
             }
             let fund_outpoint = match fund_input {
                 None => vec![],
@@ -143,7 +183,11 @@ impl UnlockTemplate for SingleSpendUnlock {
                     Some(s) => build_outpoint(&s.borrow(), f.source_output_index)?,
                 },
             };
-            let change_output = if has_change { build_change_output(tx, change_idx) } else { vec![] };
+            let change_output = if has_change {
+                build_change_output(tx, change_idx)
+            } else {
+                vec![]
+            };
 
             let mut out = vec![];
             if layout.has_auth {
@@ -151,8 +195,17 @@ impl UnlockTemplate for SingleSpendUnlock {
             }
             out.extend(ancestor_chunks);
             for b in [
-                &fund_outpoint, &change_output, &p.beneficiary_pub_key_hash, &sig, &pub_key, &c.header, &c.code_len,
-                &c.unlock_script_code, &c.lock_script_code, &c.footer, &c.lock_len,
+                &fund_outpoint,
+                &change_output,
+                &p.beneficiary_pub_key_hash,
+                &sig,
+                &pub_key,
+                &c.header,
+                &c.code_len,
+                &c.unlock_script_code,
+                &c.lock_script_code,
+                &c.footer,
+                &c.lock_len,
             ] {
                 out.extend(chunks_from_bin(b));
             }

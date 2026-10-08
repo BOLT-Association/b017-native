@@ -28,23 +28,42 @@ fn vectors_lock_simple_multi() {
             output_index_n: arg_at(args, 8).bytes(),
             prev_vout_idx: arg_at(args, 9).number().unwrap_or(0) as usize,
         };
-        let r = SimpleMultiTemplate::lock(&arg_at(args, 0).bytes().unwrap(), &arg_at(args, 1).tx_list(&mut g), &a);
+        let r = SimpleMultiTemplate::lock(
+            &arg_at(args, 0).bytes().unwrap(),
+            &arg_at(args, 1).tx_list(&mut g),
+            &a,
+        );
         match (rec.get("throws"), r) {
             (Some(_), Ok(_)) => fails.push(format!("{}: TS threw, Rust succeeded", label(rec, i))),
             (None, Err(e)) => fails.push(format!("{}: {e}", label(rec, i))),
-            (None, Ok(s)) if s.to_hex() != rec["result"].as_str().unwrap() => fails.push(format!("{}: lock differs", label(rec, i))),
+            (None, Ok(s)) if s.to_hex() != rec["result"].as_str().unwrap() => {
+                fails.push(format!("{}: lock differs", label(rec, i)))
+            }
             _ => {}
         }
     }
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }
 
 #[test]
 fn vectors_sign_simple_multi() {
     let fails = replay_sign("sign.SimpleMulti", &|g, method, args| {
         if method == "melt" {
-            let lock = if arg_at(args, 2).t() == "script" { Some(Script::from_hex(args[2]["hex"].as_str().unwrap()).unwrap()) } else { None };
-            return Ok(Rc::new(SimpleMultiTemplate::melt(arg_at(args, 0).signer(), arg_at(args, 1).number(), lock)));
+            let lock = if arg_at(args, 2).t() == "script" {
+                Some(Script::from_hex(args[2]["hex"].as_str().unwrap()).unwrap())
+            } else {
+                None
+            };
+            return Ok(Rc::new(SimpleMultiTemplate::melt(
+                arg_at(args, 0).signer(),
+                arg_at(args, 1).number(),
+                lock,
+            )));
         }
         let a = SmbUnlockArgs {
             force_no_change: arg_at(args, 3).boolean(),
@@ -61,9 +80,19 @@ fn vectors_sign_simple_multi() {
             ancestor_tx_b_ref: arg_at(args, 14).tx_or_none(g),
         };
         let prev = arg_at(args, 2).tx_list(g);
-        Ok(Rc::new(SimpleMultiTemplate::unlock(arg_at(args, 0).signer(), &arg_at(args, 1).bytes().unwrap_or_default(), prev, a)))
+        Ok(Rc::new(SimpleMultiTemplate::unlock(
+            arg_at(args, 0).signer(),
+            &arg_at(args, 1).bytes().unwrap_or_default(),
+            prev,
+            a,
+        )))
     });
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }
 
 // ---- class flows ----
@@ -87,13 +116,21 @@ fn bal(n: u128) -> Vec<u8> {
     n.to_le_bytes().to_vec()
 }
 fn fresh(k: &Rc<dyn Signer>) -> TxRef {
-    tx_ref(Transaction { version: 1, outputs: vec![Output::new(1000, p2pkh_lock(&hash160(&k.public_key())))], ..Default::default() })
+    tx_ref(Transaction {
+        version: 1,
+        outputs: vec![Output::new(1000, p2pkh_lock(&hash160(&k.public_key())))],
+        ..Default::default()
+    })
 }
 fn snap(step: &str, b: &SimpleMultiBOLT) -> Step {
     Step {
         step: step.into(),
         tx: b.tx.as_ref().map(|t| t.borrow().to_hex().unwrap()),
-        prev_txs: b.prev_txs.iter().map(|t| t.borrow().to_hex().unwrap()).collect(),
+        prev_txs: b
+            .prev_txs
+            .iter()
+            .map(|t| t.borrow().to_hex().unwrap())
+            .collect(),
         balance: hex_encode(&b.balance),
         error: None,
     }
@@ -106,7 +143,8 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
     match name {
         "lifecycle" => {
             let mut t = SimpleMultiBOLT::new();
-            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM))).await?;
+            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM)))
+                .await?;
             log.push(snap("mint", &t));
             t.transfer(&rk(101), false, TransferOpts::default()).await?;
             log.push(snap("transfer1", &t));
@@ -118,9 +156,11 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
         }
         "merge-melt" => {
             let mut a = SimpleMultiBOLT::new();
-            a.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM))).await?;
+            a.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM)))
+                .await?;
             let mut b = SimpleMultiBOLT::new();
-            b.mint(issuer.clone(), &fresh(&issuer), Some(bal(1))).await?;
+            b.mint(issuer.clone(), &fresh(&issuer), Some(bal(1)))
+                .await?;
             log.push(snap("mintA", &a));
             log.push(snap("mintB", &b));
             a.transfer(&rk(101), false, TransferOpts::default()).await?;
@@ -135,12 +175,23 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
         }
         "builder-branches" => {
             let mut a = SimpleMultiBOLT::new();
-            a.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM))).await?;
+            a.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM)))
+                .await?;
             a.skip_verify = true;
-            a.transfer(&rk(901), false, TransferOpts { force_no_change: true, force_no_fund: true, ..Default::default() }).await?;
+            a.transfer(
+                &rk(901),
+                false,
+                TransferOpts {
+                    force_no_change: true,
+                    force_no_fund: true,
+                    ..Default::default()
+                },
+            )
+            .await?;
             log.push(snap("noChange.noFund", &a));
             let mut b = SimpleMultiBOLT::new();
-            b.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM))).await?;
+            b.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM)))
+                .await?;
             b.skip_verify = true;
             let ov = Input {
                 source_transaction: Some(fresh(&issuer)),
@@ -149,25 +200,43 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
                 sequence: Some(0xffff_ffff),
                 ..Default::default()
             };
-            b.transfer(&rk(902), false, TransferOpts { fund_override: Some(ov), ..Default::default() }).await?;
+            b.transfer(
+                &rk(902),
+                false,
+                TransferOpts {
+                    fund_override: Some(ov),
+                    ..Default::default()
+                },
+            )
+            .await?;
             log.push(snap("fundOverride", &b));
             let mut c = SimpleMultiBOLT::new();
-            c.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM))).await?;
+            c.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM)))
+                .await?;
             c.melt(Some(hash160(&key(901).public_key()))).await?;
             log.push(snap("melt.pkh", &c));
         }
         "funding-source" => {
-            let fsrc = || Some(FundingSource { tx: Some(fresh(&issuer)), vout: Some(0), key: Some(issuer.clone()) });
+            let fsrc = || {
+                Some(FundingSource {
+                    tx: Some(fresh(&issuer)),
+                    vout: Some(0),
+                    key: Some(issuer.clone()),
+                })
+            };
             let mut t = SimpleMultiBOLT::new();
-            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM))).await?;
+            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM)))
+                .await?;
             t.transfer(&rk(101), false, TransferOpts::default()).await?;
             let piece = t.split(&rk(110), &rk(111), &bal(1), fsrc()).await?;
             log.push(snap("split.main", &t));
             log.push(snap("split.piece", &piece));
             let mut a = SimpleMultiBOLT::new();
-            a.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM))).await?;
+            a.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM)))
+                .await?;
             let mut b = SimpleMultiBOLT::new();
-            b.mint(issuer.clone(), &fresh(&issuer), Some(bal(1))).await?;
+            b.mint(issuer.clone(), &fresh(&issuer), Some(bal(1)))
+                .await?;
             a.transfer(&rk(101), false, TransferOpts::default()).await?;
             b.transfer(&rk(102), false, TransferOpts::default()).await?;
             a.merge(&mut b, &rk(400), fsrc()).await?;
@@ -176,9 +245,17 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
         "second-piece" => {
             let (ka, kb) = (key(110), key(111));
             let mut t = SimpleMultiBOLT::new();
-            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000))).await?;
+            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000)))
+                .await?;
             t.transfer(&rk(101), false, TransferOpts::default()).await?;
-            let mut piece_b = t.split(&Recipient::Signer(ka), &Recipient::Signer(kb.clone()), &bal(300), None).await?;
+            let mut piece_b = t
+                .split(
+                    &Recipient::Signer(ka),
+                    &Recipient::Signer(kb.clone()),
+                    &bal(300),
+                    None,
+                )
+                .await?;
             let mut piece_b2 = piece_b.clone();
             let fund = Input {
                 source_transaction: Some(fresh(&kb)),
@@ -187,19 +264,37 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
                 sequence: Some(0xffff_ffff),
                 ..Default::default()
             };
-            piece_b.commit(&rk(120), TransferOpts { fund_override: Some(fund), ..Default::default() }).await?;
+            piece_b
+                .commit(
+                    &rk(120),
+                    TransferOpts {
+                        fund_override: Some(fund),
+                        ..Default::default()
+                    },
+                )
+                .await?;
             log.push(snap("pieceB.commit", &piece_b));
             piece_b.settle(&rk(120), TransferOpts::default()).await?;
             log.push(snap("pieceB.settle", &piece_b));
             let b2 = piece_b2
-                .split(&rk(130), &rk(131), &bal(100), Some(FundingSource { tx: Some(fresh(&kb)), vout: Some(0), key: Some(kb.clone()) }))
+                .split(
+                    &rk(130),
+                    &rk(131),
+                    &bal(100),
+                    Some(FundingSource {
+                        tx: Some(fresh(&kb)),
+                        vout: Some(0),
+                        key: Some(kb.clone()),
+                    }),
+                )
                 .await?;
             log.push(snap("pieceB2.split.main", &piece_b2));
             log.push(snap("pieceB2.split.piece", &b2));
         }
         "settle-wrong-key" => {
             let mut t = SimpleMultiBOLT::new();
-            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000))).await?;
+            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000)))
+                .await?;
             t.commit(&rk(101), TransferOpts::default()).await?;
             log.push(snap("commit", &t));
             t.signer = Some(key(55));
@@ -207,9 +302,11 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
         }
         "merge-bad-other" => {
             let mut a = SimpleMultiBOLT::new();
-            a.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM))).await?;
+            a.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM)))
+                .await?;
             let mut b = SimpleMultiBOLT::new();
-            b.mint(issuer.clone(), &fresh(&issuer), Some(bal(1))).await?;
+            b.mint(issuer.clone(), &fresh(&issuer), Some(bal(1)))
+                .await?;
             a.transfer(&rk(101), false, TransferOpts::default()).await?;
             b.transfer(&rk(102), false, TransferOpts::default()).await?;
             b.balance = bal(2);
@@ -218,7 +315,8 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
         }
         "split-bad-balance" => {
             let mut t = SimpleMultiBOLT::new();
-            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000))).await?;
+            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000)))
+                .await?;
             t.transfer(&rk(101), false, TransferOpts::default()).await?;
             t.balance = bal(999);
             log.push(snap("before", &t));
@@ -226,7 +324,8 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
         }
         "melt-wrong-key" => {
             let mut t = SimpleMultiBOLT::new();
-            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000))).await?;
+            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000)))
+                .await?;
             t.transfer(&rk(101), false, TransferOpts::default()).await?;
             t.signer = Some(key(55));
             log.push(snap("before", &t));
@@ -234,7 +333,8 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
         }
         "inflated-balance" => {
             let mut t = SimpleMultiBOLT::new();
-            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000))).await?;
+            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000)))
+                .await?;
             t.balance = bal(1001);
             log.push(snap("mint", &t));
             t.transfer(&rk(101), false, TransferOpts::default()).await?;
@@ -247,16 +347,29 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
 
 #[test]
 fn vectors_flows() {
-    let want: Value = serde_json::from_str(&std::fs::read_to_string(vectors_dir().join("flows.json")).unwrap()).unwrap();
+    let want: Value =
+        serde_json::from_str(&std::fs::read_to_string(vectors_dir().join("flows.json")).unwrap())
+            .unwrap();
     let mut fails = vec![];
     for (name, steps) in want.as_object().unwrap() {
         let mut got = vec![];
         if let Err(e) = block_on(scenario(name, &mut got)) {
-            got.push(Step { step: "error".into(), tx: None, prev_txs: vec![], balance: String::new(), error: Some(e.0) });
+            got.push(Step {
+                step: "error".into(),
+                tx: None,
+                prev_txs: vec![],
+                balance: String::new(),
+                error: Some(e.0),
+            });
         }
         let steps = steps.as_array().unwrap();
         if got.len() != steps.len() {
-            fails.push(format!("{name}: {} steps, want {} (last {:?})", got.len(), steps.len(), got.last().and_then(|s| s.error.clone())));
+            fails.push(format!(
+                "{name}: {} steps, want {} (last {:?})",
+                got.len(),
+                steps.len(),
+                got.last().and_then(|s| s.error.clone())
+            ));
             continue;
         }
         for (g, w) in got.iter().zip(steps) {
@@ -274,14 +387,27 @@ fn vectors_flows() {
             if g.tx.as_deref() != w["tx"].as_str() {
                 fails.push(format!("{name}/{}: tx differs", g.step));
             }
-            let wp: Vec<&str> = w["prevTxs"].as_array().unwrap().iter().map(|x| x.as_str().unwrap()).collect();
+            let wp: Vec<&str> = w["prevTxs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_str().unwrap())
+                .collect();
             if g.prev_txs.iter().map(|s| s.as_str()).collect::<Vec<_>>() != wp {
                 fails.push(format!("{name}/{}: prevTxs differ", g.step));
             }
             if g.balance != w["balance"].as_str().unwrap() {
-                fails.push(format!("{name}/{}: balance {} want {}", g.step, g.balance, w["balance"]));
+                fails.push(format!(
+                    "{name}/{}: balance {} want {}",
+                    g.step, g.balance, w["balance"]
+                ));
             }
         }
     }
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }

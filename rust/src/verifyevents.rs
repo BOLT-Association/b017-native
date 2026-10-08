@@ -11,7 +11,9 @@ use serde_json_lite::Json;
 use crate::beef::{from_beef, is_beef, Bin};
 use crate::error::{err, Error, Result};
 use crate::fingerprints::{issuer_pub_key_of, recognize_p2p, recognize_type, TokenType};
-use crate::script::{chunk_data, hex_encode, Script, OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160};
+use crate::script::{
+    chunk_data, hex_encode, Script, OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160,
+};
 use crate::sighash::{BoxFuture, OutpointRef};
 use crate::spend::{validate, SpendParams};
 use crate::tx::{reversed, tx_ref, Input, Output, Transaction, TxRef};
@@ -28,11 +30,11 @@ pub mod serde_json_lite {
         Arr(Vec<Json>),
         Obj(Vec<(String, Json)>),
     }
-    impl Json {
+    impl std::fmt::Display for Json {
         /// Serialise (keys in insertion order).
-        pub fn to_string(&self) -> String {
-            match self {
-                Json::Null => "null".into(),
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let s = match self {
+                Json::Null => "null".to_string(),
                 Json::Bool(b) => b.to_string(),
                 Json::Num(n) => n.to_string(),
                 Json::Str(s) => {
@@ -51,12 +53,22 @@ pub mod serde_json_lite {
                     o.push('"');
                     o
                 }
-                Json::Arr(a) => format!("[{}]", a.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",")),
+                Json::Arr(a) => format!(
+                    "[{}]",
+                    a.iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
                 Json::Obj(m) => format!(
                     "{{{}}}",
-                    m.iter().map(|(k, v)| format!("{}:{}", Json::Str(k.clone()).to_string(), v.to_string())).collect::<Vec<_>>().join(",")
+                    m.iter()
+                        .map(|(k, v)| format!("{}:{}", Json::Str(k.clone()), v))
+                        .collect::<Vec<_>>()
+                        .join(",")
                 ),
-            }
+            };
+            f.write_str(&s)
         }
     }
 }
@@ -172,13 +184,25 @@ pub struct EventResult {
 }
 
 fn j_sources(v: &[SourceTx]) -> Json {
-    Json::Arr(v.iter().map(|s| Json::Obj(vec![("txid".into(), Json::Str(s.txid.clone())), ("proven".into(), Json::Bool(s.proven))])).collect())
+    Json::Arr(
+        v.iter()
+            .map(|s| {
+                Json::Obj(vec![
+                    ("txid".into(), Json::Str(s.txid.clone())),
+                    ("proven".into(), Json::Bool(s.proven)),
+                ])
+            })
+            .collect(),
+    )
 }
 fn j_anchors(v: &[AnchorRef]) -> Json {
     Json::Arr(
         v.iter()
             .map(|a| {
-                let mut m = vec![("txid".into(), Json::Str(a.txid.clone())), ("kind".into(), Json::Str(a.kind.clone()))];
+                let mut m = vec![
+                    ("txid".into(), Json::Str(a.txid.clone())),
+                    ("kind".into(), Json::Str(a.kind.clone())),
+                ];
                 if let Some(s) = &a.status {
                     m.push(("status".into(), Json::Str(s.clone())));
                 }
@@ -206,7 +230,10 @@ fn j_offchain(v: &[OffChainOnlyTx]) -> Json {
 
 impl ScanResult {
     fn fail(reason: impl Into<String>) -> Self {
-        ScanResult { reason: Some(reason.into()), ..Default::default() }
+        ScanResult {
+            reason: Some(reason.into()),
+            ..Default::default()
+        }
     }
     /// The fields the reference sets, as JSON.
     pub fn to_json(&self) -> Json {
@@ -234,7 +261,12 @@ impl ScanResult {
                         .map(|e| {
                             Json::Obj(vec![
                                 ("kind".into(), Json::Str(e.kind.clone())),
-                                ("txids".into(), Json::Arr(e.txids.iter().map(|t| Json::Str(t.clone())).collect())),
+                                (
+                                    "txids".into(),
+                                    Json::Arr(
+                                        e.txids.iter().map(|t| Json::Str(t.clone())).collect(),
+                                    ),
+                                ),
                             ])
                         })
                         .collect(),
@@ -253,7 +285,10 @@ impl ScanResult {
 
 impl EventResult {
     fn fail(reason: impl Into<String>) -> Self {
-        EventResult { reason: Some(reason.into()), ..Default::default() }
+        EventResult {
+            reason: Some(reason.into()),
+            ..Default::default()
+        }
     }
     /// The fields the reference sets, as JSON.
     pub fn to_json(&self) -> Json {
@@ -297,7 +332,11 @@ pub trait AnchorBroadcaster {
 
 /// An async source of block headers (the ChainTracker shape).
 pub trait HeaderSource {
-    fn is_valid_root_for_height<'a>(&'a self, root: &'a str, height: u64) -> BoxFuture<'a, Result<bool>>;
+    fn is_valid_root_for_height<'a>(
+        &'a self,
+        root: &'a str,
+        height: u64,
+    ) -> BoxFuture<'a, Result<bool>>;
 }
 
 /// The first line of an error's message.
@@ -310,7 +349,11 @@ fn to_tx(t: &TxInput) -> std::result::Result<TxRef, String> {
         TxInput::Tx(x) => return Ok(x.clone()),
         TxInput::Hex(h) => Bin::Hex(h),
         TxInput::Bytes(b) => Bin::Bytes(b),
-        TxInput::Other => return Err("not a transaction: expected a Transaction, raw tx hex, or BEEF hex / bytes".into()),
+        TxInput::Other => {
+            return Err(
+                "not a transaction: expected a Transaction, raw tx hex, or BEEF hex / bytes".into(),
+            )
+        }
     };
     if is_beef(&bin) {
         return from_beef(&bin).map_err(|e| format!("invalid BEEF: {}", err_text(&e)));
@@ -319,7 +362,8 @@ fn to_tx(t: &TxInput) -> std::result::Result<TxRef, String> {
         Bin::Hex(h) => Transaction::from_hex(h),
         Bin::Bytes(b) => Transaction::from_binary(b),
     };
-    r.map(tx_ref).map_err(|e| format!("malformed transaction hex: {}", err_text(&e)))
+    r.map(tx_ref)
+        .map_err(|e| format!("malformed transaction hex: {}", err_text(&e)))
 }
 
 fn opt_hex(k: &Option<TrustedKey>) -> String {
@@ -367,7 +411,10 @@ fn source_of(input: &Input, ids: &ById) -> Option<TxRef> {
     if let Some(s) = &input.source_transaction {
         return Some(s.clone());
     }
-    input.source_txid.as_ref().and_then(|id| ids.get(id).cloned())
+    input
+        .source_txid
+        .as_ref()
+        .and_then(|id| ids.get(id).cloned())
 }
 
 fn spent_txid(input: &Input) -> Result<Option<String>> {
@@ -381,7 +428,8 @@ fn spent_txid(input: &Input) -> Result<Option<String>> {
 }
 
 fn out_at(t: &Option<TxRef>, i: u32) -> Option<Output> {
-    t.as_ref().and_then(|t| t.borrow().outputs.get(i as usize).cloned())
+    t.as_ref()
+        .and_then(|t| t.borrow().outputs.get(i as usize).cloned())
 }
 
 fn classify_out(lock: Option<&Script>, t: TokenType) -> Cls {
@@ -426,18 +474,42 @@ struct Category {
 }
 
 fn token_out_index(tx: &Transaction, t: TokenType) -> i64 {
-    tx.outputs.iter().position(|o| recognize_type(o.locking_script.as_ref(), Some(t)).is_some()).map_or(-1, |i| i as i64)
+    tx.outputs
+        .iter()
+        .position(|o| recognize_type(o.locking_script.as_ref(), Some(t)).is_some())
+        .map_or(-1, |i| i as i64)
 }
 
 fn categorise(tx: &TxRef, t: TokenType, ids: &ById) -> Option<Category> {
     let b = tx.borrow();
     let idx = token_out_index(&b, t);
     if idx >= 0 {
-        let lock = b.outputs[idx as usize].locking_script.clone().unwrap_or_default();
+        let lock = b.outputs[idx as usize]
+            .locking_script
+            .clone()
+            .unwrap_or_default();
         if field(&lock, t, F_PARENT).iter().all(|&x| x == 0) {
-            return Some(Category { shape: Shape { kind: "mint", token_in: 0, token_out: 1, proof_out: 0 }, token_out_idx: idx });
+            return Some(Category {
+                shape: Shape {
+                    kind: "mint",
+                    token_in: 0,
+                    token_out: 1,
+                    proof_out: 0,
+                },
+                token_out_idx: idx,
+            });
         }
-        let s = |kind, a, bb, c| Some(Category { shape: Shape { kind, token_in: a, token_out: bb, proof_out: c }, token_out_idx: idx });
+        let s = |kind, a, bb, c| {
+            Some(Category {
+                shape: Shape {
+                    kind,
+                    token_in: a,
+                    token_out: bb,
+                    proof_out: c,
+                },
+                token_out_idx: idx,
+            })
+        };
         return match hex_encode(&field(&lock, t, F_TXO_TYPE)).as_str() {
             "21" => s("commit", 1, 1, 1),
             "23" => s("commit", 1, 1, 2),
@@ -446,15 +518,33 @@ fn categorise(tx: &TxRef, t: TokenType, ids: &ById) -> Option<Category> {
             _ => s("settle", 1, 1, 0),
         };
     }
-    if b.inputs.iter().any(|i| classify_in(i, t, ids) == Cls::Token) {
-        return Some(Category { shape: Shape { kind: "melt", token_in: 1, token_out: 0, proof_out: 0 }, token_out_idx: -1 });
+    if b.inputs
+        .iter()
+        .any(|i| classify_in(i, t, ids) == Cls::Token)
+    {
+        return Some(Category {
+            shape: Shape {
+                kind: "melt",
+                token_in: 1,
+                token_out: 0,
+                proof_out: 0,
+            },
+            token_out_idx: -1,
+        });
     }
     None
 }
 
 fn unauthenticated_mint(txs: &[TxRef], t: TokenType, ids: &ById) -> Result<Option<TxRef>> {
-    let cats: Vec<(TxRef, Option<Category>)> = txs.iter().map(|tx| (tx.clone(), categorise(tx, t, ids))).collect();
-    let commits: Vec<&TxRef> = cats.iter().filter(|(_, c)| c.is_some_and(|c| c.shape.kind == "commit")).map(|(tx, _)| tx).collect();
+    let cats: Vec<(TxRef, Option<Category>)> = txs
+        .iter()
+        .map(|tx| (tx.clone(), categorise(tx, t, ids)))
+        .collect();
+    let commits: Vec<&TxRef> = cats
+        .iter()
+        .filter(|(_, c)| c.is_some_and(|c| c.shape.kind == "commit"))
+        .map(|(tx, _)| tx)
+        .collect();
     for (tx, cat) in &cats {
         let cat = match cat {
             Some(c) if c.shape.kind == "mint" => c,
@@ -464,7 +554,9 @@ fn unauthenticated_mint(txs: &[TxRef], t: TokenType, ids: &ById) -> Result<Optio
         let mut spent = false;
         for c in &commits {
             for i in &c.borrow().inputs {
-                if spent_txid(i)?.as_deref() == Some(txid.as_str()) && i.source_output_index as i64 == cat.token_out_idx {
+                if spent_txid(i)?.as_deref() == Some(txid.as_str())
+                    && i.source_output_index as i64 == cat.token_out_idx
+                {
                     spent = true;
                 }
             }
@@ -482,7 +574,11 @@ fn execute_inputs(txs: &[TxRef], ids: &ById) -> Result<Option<String>> {
         let b = tx.borrow();
         for (vin, input) in b.inputs.iter().enumerate() {
             let out = match out_at(&source_of(input, ids), input.source_output_index) {
-                None => return Ok(Some(format!("script execution failed: tx {id} input {vin}: its source tx was not supplied"))),
+                None => {
+                    return Ok(Some(format!(
+                    "script execution failed: tx {id} input {vin}: its source tx was not supplied"
+                )))
+                }
                 Some(o) => o,
             };
             let failure = (|| -> Result<Option<String>> {
@@ -525,7 +621,9 @@ fn execute_inputs(txs: &[TxRef], ids: &ById) -> Result<Option<String>> {
                 Err(e) => Some(err_text(&e)),
             };
             if let Some(f) = failure {
-                return Ok(Some(format!("script execution failed: tx {id} input {vin}: {f}")));
+                return Ok(Some(format!(
+                    "script execution failed: tx {id} input {vin}: {f}"
+                )));
             }
         }
     }
@@ -573,10 +671,16 @@ struct Proof {
 }
 
 fn header_proof(tx: &TxRef, opts: &ScanOpts) -> Result<Proof> {
-    let path = match tx.borrow().merkle_path.clone() {
-        None => return Ok(Proof { proven: false, why: "it is accepted only with an SPV proof (a merkle path) to a known block header".into() }),
-        Some(p) => p,
-    };
+    let path =
+        match tx.borrow().merkle_path.clone() {
+            None => return Ok(Proof {
+                proven: false,
+                why:
+                    "it is accepted only with an SPV proof (a merkle path) to a known block header"
+                        .into(),
+            }),
+            Some(p) => p,
+        };
     let known_fn = match &opts.is_known_block_root {
         None => {
             return Ok(Proof {
@@ -588,19 +692,35 @@ fn header_proof(tx: &TxRef, opts: &ScanOpts) -> Result<Proof> {
     };
     let height = path.borrow().block_height;
     let root = match path.borrow().compute_root(&id_of(tx)?) {
-        Err(e) => return Ok(Proof { proven: false, why: format!("its merkle path does not prove it ({})", err_text(&e)) }),
+        Err(e) => {
+            return Ok(Proof {
+                proven: false,
+                why: format!("its merkle path does not prove it ({})", err_text(&e)),
+            })
+        }
         Ok(r) => r,
     };
     if known_fn(&root, height).unwrap_or(false) {
-        Ok(Proof { proven: true, why: String::new() })
+        Ok(Proof {
+            proven: true,
+            why: String::new(),
+        })
     } else {
-        Ok(Proof { proven: false, why: format!("its merkle root is not a known block header at height {height}") })
+        Ok(Proof {
+            proven: false,
+            why: format!("its merkle root is not a known block header at height {height}"),
+        })
     }
 }
 
 fn value_of(tx: &TxRef, ids: &ById) -> (u64, u64) {
     let b = tx.borrow();
-    let i = b.inputs.iter().filter_map(|i| out_at(&source_of(i, ids), i.source_output_index)).map(|o| o.sats()).sum();
+    let i = b
+        .inputs
+        .iter()
+        .filter_map(|i| out_at(&source_of(i, ids), i.source_output_index))
+        .map(|o| o.sats())
+        .sum();
     let o = b.outputs.iter().map(|o| o.sats()).sum();
     (i, o)
 }
@@ -611,9 +731,17 @@ fn anchor_not_minable(tx: &TxRef, t: TokenType, ids: &ById, why: &str) -> Result
     if o > i {
         return Ok(Some(format!("anchor {id} creates value (inputs {i} sat, outputs {o} sat): the network will never accept it; {why}")));
     }
-    let funded = tx.borrow().inputs.iter().any(|x| matches!(classify_in(x, t, ids), Cls::P2pkh | Cls::External));
+    let funded = tx
+        .borrow()
+        .inputs
+        .iter()
+        .any(|x| matches!(classify_in(x, t, ids), Cls::P2pkh | Cls::External));
     if !funded {
-        let note = if tx.borrow().merkle_path.is_none() { "it pays no fee, so the network will not mine it on sight; " } else { "" };
+        let note = if tx.borrow().merkle_path.is_none() {
+            "it pays no fee, so the network will not mine it on sight; "
+        } else {
+            ""
+        };
         return Ok(Some(format!("unfunded anchor {id}: {note}{why}")));
     }
     Ok(None)
@@ -635,13 +763,26 @@ fn join(c: &[Cls]) -> String {
     c.iter().map(|x| x.s()).collect::<Vec<_>>().join(",")
 }
 
-fn check_arrangement(tx: &TxRef, t: TokenType, sh: Shape, ids: &ById, outputs_only: bool) -> Result<Option<String>> {
+fn check_arrangement(
+    tx: &TxRef,
+    t: TokenType,
+    sh: Shape,
+    ids: &ById,
+    outputs_only: bool,
+) -> Result<Option<String>> {
     let id = id8(tx)?;
     let b = tx.borrow();
-    let outs: Vec<Cls> = b.outputs.iter().map(|o| classify_out(o.locking_script.as_ref(), t)).collect();
+    let outs: Vec<Cls> = b
+        .outputs
+        .iter()
+        .map(|o| classify_out(o.locking_script.as_ref(), t))
+        .collect();
     let ins: Vec<Cls> = b.inputs.iter().map(|i| classify_in(i, t, ids)).collect();
     if outs.contains(&Cls::Other) {
-        return Ok(Some(format!("uninspected output in {id} [{}]", join(&outs))));
+        return Ok(Some(format!(
+            "uninspected output in {id} [{}]",
+            join(&outs)
+        )));
     }
     if !outputs_only && ins.contains(&Cls::Other) {
         return Ok(Some(format!("uninspected input in {id} [{}]", join(&ins))));
@@ -649,17 +790,31 @@ fn check_arrangement(tx: &TxRef, t: TokenType, sh: Shape, ids: &ById, outputs_on
     for k in 0..sh.token_out {
         if outs.get(k) != Some(&Cls::Token) {
             let got = outs.get(k).map_or("none", |c| c.s());
-            return Ok(Some(format!("{} {id}: token output @{k} (got {got}) [{}]", sh.kind, join(&outs))));
+            return Ok(Some(format!(
+                "{} {id}: token output @{k} (got {got}) [{}]",
+                sh.kind,
+                join(&outs)
+            )));
         }
     }
     for k in 0..sh.proof_out {
         if outs.get(sh.token_out + k) != Some(&Cls::P2p) {
-            return Ok(Some(format!("{} {id}: p2p output @{} [{}]", sh.kind, sh.token_out + k, join(&outs))));
+            return Ok(Some(format!(
+                "{} {id}: p2p output @{} [{}]",
+                sh.kind,
+                sh.token_out + k,
+                join(&outs)
+            )));
         }
     }
     for (k, c) in outs.iter().enumerate().skip(sh.token_out + sh.proof_out) {
         if *c != Cls::P2pkh {
-            return Ok(Some(format!("{} {id}: change p2pkh @{k} (got {}) [{}]", sh.kind, c.s(), join(&outs))));
+            return Ok(Some(format!(
+                "{} {id}: change p2pkh @{k} (got {}) [{}]",
+                sh.kind,
+                c.s(),
+                join(&outs)
+            )));
         }
     }
     if outputs_only {
@@ -668,7 +823,11 @@ fn check_arrangement(tx: &TxRef, t: TokenType, sh: Shape, ids: &ById, outputs_on
     for k in 0..sh.token_in {
         if ins.get(k) != Some(&Cls::Token) {
             let got = ins.get(k).map_or("none", |c| c.s());
-            return Ok(Some(format!("{} {id}: token input @{k} (got {got}) [{}]", sh.kind, join(&ins))));
+            return Ok(Some(format!(
+                "{} {id}: token input @{k} (got {got}) [{}]",
+                sh.kind,
+                join(&ins)
+            )));
         }
     }
     let mut k = sh.token_in;
@@ -702,7 +861,11 @@ fn event_type(txs: &[TxRef], ids: &ById, expected: Option<TokenType>) -> Option<
     for tx in txs {
         for i in &tx.borrow().inputs {
             if let Some(o) = out_at(&source_of(i, ids), i.source_output_index) {
-                if let Some(t) = o.locking_script.as_ref().and_then(|l| recognize_type(Some(l), expected)) {
+                if let Some(t) = o
+                    .locking_script
+                    .as_ref()
+                    .and_then(|l| recognize_type(Some(l), expected))
+                {
                     return Some(t);
                 }
             }
@@ -745,16 +908,28 @@ fn verify_one_event(event_txs: &[TxInput], opts: &ScanOpts) -> Result<EventResul
     };
     if let Some(e) = opts.expected_type {
         if t != e {
-            return Ok(EventResult { token_type: Some(t), ..EventResult::fail(format!("expected {}, got {}", e.as_str(), t.as_str())) });
+            return Ok(EventResult {
+                token_type: Some(t),
+                ..EventResult::fail(format!("expected {}, got {}", e.as_str(), t.as_str()))
+            });
         }
     }
     for tx in &txs {
         let cat = match categorise(tx, t, &ids) {
-            None => return Ok(EventResult { token_type: Some(t), ..EventResult::fail(format!("tx {} is not a token tx", id8(tx)?)) }),
+            None => {
+                return Ok(EventResult {
+                    token_type: Some(t),
+                    ..EventResult::fail(format!("tx {} is not a token tx", id8(tx)?))
+                })
+            }
             Some(c) => c,
         };
         if let Some(r) = check_arrangement(tx, t, cat.shape, &ids, false)? {
-            return Ok(EventResult { token_type: Some(t), kind: Some(cat.shape.kind.into()), ..EventResult::fail(r) });
+            return Ok(EventResult {
+                token_type: Some(t),
+                kind: Some(cat.shape.kind.into()),
+                ..EventResult::fail(r)
+            });
         }
     }
     if let Some(stray) = unauthenticated_mint(&txs, t, &ids)? {
@@ -766,10 +941,20 @@ fn verify_one_event(event_txs: &[TxInput], opts: &ScanOpts) -> Result<EventResul
         });
     }
     if let (Some(f), _) = require_sources(&txs, &ids)? {
-        return Ok(EventResult { token_type: Some(t), ..EventResult::fail(f) });
+        return Ok(EventResult {
+            token_type: Some(t),
+            ..EventResult::fail(f)
+        });
     }
-    let commit_tx = txs.iter().find(|x| categorise(x, t, &ids).is_some_and(|c| c.shape.kind == "commit")).cloned();
-    let settle_txs: Vec<TxRef> = txs.iter().filter(|x| categorise(x, t, &ids).is_some_and(|c| c.shape.kind == "settle")).cloned().collect();
+    let commit_tx = txs
+        .iter()
+        .find(|x| categorise(x, t, &ids).is_some_and(|c| c.shape.kind == "commit"))
+        .cloned();
+    let settle_txs: Vec<TxRef> = txs
+        .iter()
+        .filter(|x| categorise(x, t, &ids).is_some_and(|c| c.shape.kind == "settle"))
+        .cloned()
+        .collect();
     if let Some(c) = &commit_tx {
         if !settle_txs.is_empty() {
             let c_idx = token_out_index(&c.borrow(), t);
@@ -778,14 +963,20 @@ fn verify_one_event(event_txs: &[TxInput], opts: &ScanOpts) -> Result<EventResul
             for s in &settle_txs {
                 let b = s.borrow();
                 let s_idx = token_out_index(&b, t);
-                let lock = b.outputs[s_idx as usize].locking_script.clone().unwrap_or_default();
+                let lock = b.outputs[s_idx as usize]
+                    .locking_script
+                    .clone()
+                    .unwrap_or_default();
                 let (pid, pv) = parse_outpoint(&field(&lock, t, F_PARENT));
                 if pid == cid && pv as i64 == c_idx {
                     linked = true;
                 }
             }
             if !linked {
-                return Ok(EventResult { token_type: Some(t), ..EventResult::fail("settle.parent does not link to the commit token") });
+                return Ok(EventResult {
+                    token_type: Some(t),
+                    ..EventResult::fail("settle.parent does not link to the commit token")
+                });
             }
         }
     }
@@ -801,11 +992,20 @@ fn verify_one_event(event_txs: &[TxInput], opts: &ScanOpts) -> Result<EventResul
             ..Default::default()
         });
     }
-    let actions: Vec<&Event> = r.events.as_ref().unwrap().iter().filter(|e| e.kind != "mint").collect();
+    let actions: Vec<&Event> = r
+        .events
+        .as_ref()
+        .unwrap()
+        .iter()
+        .filter(|e| e.kind != "mint")
+        .collect();
     if actions.len() != 1 {
         return Ok(EventResult {
             token_type: Some(t),
-            ..EventResult::fail(format!("expected exactly one event, got {} (use verifyEvents for a batch)", actions.len()))
+            ..EventResult::fail(format!(
+                "expected exactly one event, got {} (use verifyEvents for a batch)",
+                actions.len()
+            ))
         });
     }
     Ok(EventResult {
@@ -857,7 +1057,9 @@ pub async fn verify_and_broadcast(
                 known.insert(k);
             }
         }
-        scan_opts.is_known_block_root = Some(Rc::new(move |root: &str, height: u64| Ok(known.contains(&format!("{height}:{root}")))));
+        scan_opts.is_known_block_root = Some(Rc::new(move |root: &str, height: u64| {
+            Ok(known.contains(&format!("{height}:{root}")))
+        }));
     }
     let mut anchor_txs = vec![];
     let result = scan(txs_in, &scan_opts, Some(&mut anchor_txs));
@@ -869,7 +1071,10 @@ pub async fn verify_and_broadcast(
         let r = result.anchors.as_ref().unwrap()[k].clone();
         let sent = match broadcaster.broadcast(tx).await {
             Ok(s) => s,
-            Err(e) => AnchorBroadcastResult { status: Some("rejected".into()), detail: Some(format!("broadcast failed: {}", err_text(&e))) },
+            Err(e) => AnchorBroadcastResult {
+                status: Some("rejected".into()),
+                detail: Some(format!("broadcast failed: {}", err_text(&e))),
+            },
         };
         let st = sent.status.clone();
         let known = matches!(st.as_deref(), Some("accepted") | Some("already-seen"));
@@ -877,17 +1082,28 @@ pub async fn verify_and_broadcast(
             if known || st.as_deref() == Some("rejected") {
                 None
             } else {
-                Some(format!("unknown broadcast status {}", st.clone().unwrap_or_else(|| "undefined".into())))
+                Some(format!(
+                    "unknown broadcast status {}",
+                    st.clone().unwrap_or_else(|| "undefined".into())
+                ))
             }
         });
         anchors.push(AnchorRef {
             txid: r.txid.clone(),
             kind: r.kind.clone(),
-            status: Some(if known { st.clone().unwrap() } else { "rejected".into() }),
+            status: Some(if known {
+                st.clone().unwrap()
+            } else {
+                "rejected".into()
+            }),
             detail: detail.clone(),
         });
         if !known {
-            let mut reason = format!("anchor {} {} was not accepted by the network", r.kind, &r.txid[..8]);
+            let mut reason = format!(
+                "anchor {} {} was not accepted by the network",
+                r.kind,
+                &r.txid[..8]
+            );
             if let Some(d) = detail.filter(|d| !d.is_empty()) {
                 reason.push_str(&format!(": {d}"));
             }
@@ -901,7 +1117,10 @@ pub async fn verify_and_broadcast(
             };
         }
     }
-    ScanResult { anchors: Some(anchors), ..result }
+    ScanResult {
+        anchors: Some(anchors),
+        ..result
+    }
 }
 
 fn scan(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<TxRef>>) -> ScanResult {
@@ -916,7 +1135,11 @@ struct TokenRef {
     lock: Script,
 }
 
-fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<TxRef>>) -> Result<ScanResult> {
+fn scan_batch(
+    txs_in: &[TxInput],
+    opts: &ScanOpts,
+    anchor_out: Option<&mut Vec<TxRef>>,
+) -> Result<ScanResult> {
     let mut txs = vec![];
     for x in txs_in {
         match to_tx(x) {
@@ -933,7 +1156,10 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
         for tx in list {
             for o in &tx.borrow().outputs {
                 if let Some(t) = recognize_type(o.locking_script.as_ref(), opts.expected_type) {
-                    found.push(TokenRef { t, lock: o.locking_script.clone().unwrap() });
+                    found.push(TokenRef {
+                        t,
+                        lock: o.locking_script.clone().unwrap(),
+                    });
                 }
             }
         }
@@ -946,7 +1172,10 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
             break;
         }
         for i in &tx.borrow().inputs {
-            t = i.source_output().and_then(|o| o.locking_script).and_then(|l| recognize_type(Some(&l), opts.expected_type));
+            t = i
+                .source_output()
+                .and_then(|o| o.locking_script)
+                .and_then(|l| recognize_type(Some(&l), opts.expected_type));
             if t.is_some() {
                 break;
             }
@@ -991,7 +1220,11 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
     }
     if let Some(e) = opts.expected_type {
         if e != t {
-            return Ok(ScanResult::fail(format!("expected {}, got {}", e.as_str(), t.as_str())));
+            return Ok(ScanResult::fail(format!(
+                "expected {}, got {}",
+                e.as_str(),
+                t.as_str()
+            )));
         }
     }
     let mut issuers: Vec<String> = vec![];
@@ -1006,23 +1239,42 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
     }
     let issuer = issuers[0].clone();
     if issuer.len() != 66 {
-        return Ok(ScanResult { token_type: Some(t), ..ScanResult::fail("issuerPubKey is not a 33-byte compressed public key") });
+        return Ok(ScanResult {
+            token_type: Some(t),
+            ..ScanResult::fail("issuerPubKey is not a 33-byte compressed public key")
+        });
     }
     let trusted = opt_hex(&opts.trusted_issuer_pub_key);
     if !trusted.is_empty() && trusted != issuer {
         return Ok(ScanResult::fail("issuerPubKey != trusted issuer"));
     }
-    let with = |r: ScanResult| ScanResult { token_type: Some(t), ..r };
-    let with_issuer = |r: ScanResult| ScanResult { token_type: Some(t), issuer_pub_key_hex: Some(issuer.clone()), ..r };
+    let with = |r: ScanResult| ScanResult {
+        token_type: Some(t),
+        ..r
+    };
+    let with_issuer = |r: ScanResult| ScanResult {
+        token_type: Some(t),
+        issuer_pub_key_hex: Some(issuer.clone()),
+        ..r
+    };
 
     let mut cats: Vec<(TxRef, Category)> = vec![];
     for tx in &txs {
         match categorise(tx, t, &ids) {
-            None => return Ok(with(ScanResult::fail(format!("tx {} is not a BOLT token tx", id8(tx)?)))),
+            None => {
+                return Ok(with(ScanResult::fail(format!(
+                    "tx {} is not a BOLT token tx",
+                    id8(tx)?
+                ))))
+            }
             Some(c) => cats.push((tx.clone(), c)),
         }
     }
-    let commits: Vec<(TxRef, Category)> = cats.iter().filter(|(_, c)| c.shape.kind == "commit").cloned().collect();
+    let commits: Vec<(TxRef, Category)> = cats
+        .iter()
+        .filter(|(_, c)| c.shape.kind == "commit")
+        .cloned()
+        .collect();
     let mut settled = HashSet::new();
     let mut events: Vec<Event> = vec![];
     let mut anchors: Vec<AnchorRef> = vec![];
@@ -1034,8 +1286,14 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
                 continue;
             }
             for i in &c.borrow().inputs {
-                let lock = tt.borrow().outputs.get(i.source_output_index as usize).and_then(|o| o.locking_script.clone());
-                if spent_txid(i)?.as_deref() == Some(id.as_str()) && lock.is_some_and(|l| recognize_type(Some(&l), Some(t)).is_some()) {
+                let lock = tt
+                    .borrow()
+                    .outputs
+                    .get(i.source_output_index as usize)
+                    .and_then(|o| o.locking_script.clone());
+                if spent_txid(i)?.as_deref() == Some(id.as_str())
+                    && lock.is_some_and(|l| recognize_type(Some(&l), Some(t)).is_some())
+                {
                     return Ok(true);
                 }
             }
@@ -1043,7 +1301,8 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
         Ok(false)
     };
     for (tx, cat) in &cats {
-        if promoted.contains(&id_of(tx)?) && cat.shape.kind != "settle" && cat.shape.kind != "mint" {
+        if promoted.contains(&id_of(tx)?) && cat.shape.kind != "settle" && cat.shape.kind != "mint"
+        {
             return Ok(with(ScanResult::fail(format!(
                 "anchor {} is not a settled token or a mint (it is a {})",
                 id8(tx)?,
@@ -1055,7 +1314,10 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
         if cat.shape.kind != "settle" {
             continue;
         }
-        let lock = s.borrow().outputs[cat.token_out_idx as usize].locking_script.clone().unwrap_or_default();
+        let lock = s.borrow().outputs[cat.token_out_idx as usize]
+            .locking_script
+            .clone()
+            .unwrap_or_default();
         let (pid, pv) = parse_outpoint(&field(&lock, t, F_PARENT));
         let mut commit = None;
         for (c, cc) in &commits {
@@ -1067,16 +1329,27 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
         let (c, cc) = match commit {
             None => {
                 if spent_as_token(s)? {
-                    anchors.push(AnchorRef { txid: id_of(s)?, kind: "settle".into(), status: None, detail: None });
+                    anchors.push(AnchorRef {
+                        txid: id_of(s)?,
+                        kind: "settle".into(),
+                        status: None,
+                        detail: None,
+                    });
                     anchor_txs.push(s.clone());
                     continue;
                 }
-                return Ok(with(ScanResult::fail(format!("settle {} links to no commit in the batch (orphan settle)", id8(s)?))));
+                return Ok(with(ScanResult::fail(format!(
+                    "settle {} links to no commit in the batch (orphan settle)",
+                    id8(s)?
+                ))));
             }
             Some(x) => x,
         };
         settled.insert(format!("{}:{}", id_of(&c)?, cc.token_out_idx));
-        let c_lock = c.borrow().outputs[cc.token_out_idx as usize].locking_script.clone().unwrap_or_default();
+        let c_lock = c.borrow().outputs[cc.token_out_idx as usize]
+            .locking_script
+            .clone()
+            .unwrap_or_default();
         events.push(Event {
             kind: action_kind(&hex_encode(&field(&c_lock, t, F_TXO_TYPE))).into(),
             txids: vec![id_of(&c)?, id_of(s)?],
@@ -1084,7 +1357,10 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
     }
     for (c, cc) in &commits {
         if !settled.contains(&format!("{}:{}", id_of(c)?, cc.token_out_idx)) {
-            return Ok(with(ScanResult::fail(format!("commit {} has no settle in the batch (unsettled commit)", id8(c)?))));
+            return Ok(with(ScanResult::fail(format!(
+                "commit {} has no settle in the batch (unsettled commit)",
+                id8(c)?
+            ))));
         }
     }
 
@@ -1104,7 +1380,10 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
         }
     }
     if let Some(stray) = unauthenticated_mint(&txs, t, &ids)? {
-        return Ok(ScanResult { unauthenticated: true, ..with_issuer(ScanResult::fail(unauthenticated_reason(&stray)?)) });
+        return Ok(ScanResult {
+            unauthenticated: true,
+            ..with_issuer(ScanResult::fail(unauthenticated_reason(&stray)?))
+        });
     }
     let (failure, sources) = require_sources(&to_execute, &ids)?;
     if let Some(f) = failure {
@@ -1112,11 +1391,20 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
     }
     for (tx, cat) in &cats {
         if cat.shape.kind == "mint" {
-            anchors.push(AnchorRef { txid: id_of(tx)?, kind: "mint".into(), status: None, detail: None });
+            anchors.push(AnchorRef {
+                txid: id_of(tx)?,
+                kind: "mint".into(),
+                status: None,
+                detail: None,
+            });
             anchor_txs.push(tx.clone());
         }
-        if (cat.shape.kind == "mint" || cat.shape.kind == "melt") && !promoted.contains(&id_of(tx)?) {
-            events.push(Event { kind: cat.shape.kind.into(), txids: vec![id_of(tx)?] });
+        if (cat.shape.kind == "mint" || cat.shape.kind == "melt") && !promoted.contains(&id_of(tx)?)
+        {
+            events.push(Event {
+                kind: cat.shape.kind.into(),
+                txids: vec![id_of(tx)?],
+            });
         }
     }
     if let Some(f) = execute_inputs(&to_execute, &ids)? {
@@ -1126,7 +1414,10 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
         if header_proven(a) {
             continue;
         }
-        let why = proofs.get(&Rc::as_ptr(a)).map(|p| p.why.clone()).unwrap_or_default();
+        let why = proofs
+            .get(&Rc::as_ptr(a))
+            .map(|p| p.why.clone())
+            .unwrap_or_default();
         if let Some(r) = anchor_not_minable(a, t, &ids, &why)? {
             return Ok(with_issuer(ScanResult::fail(r)));
         }
@@ -1138,7 +1429,11 @@ fn scan_batch(txs_in: &[TxInput], opts: &ScanOpts, anchor_out: Option<&mut Vec<T
         }
         let (i, o) = value_of(tx, &ids);
         if o > i {
-            off.push(OffChainOnlyTx { txid: id_of(tx)?, input_sats: i, output_sats: o });
+            off.push(OffChainOnlyTx {
+                txid: id_of(tx)?,
+                input_sats: i,
+                output_sats: o,
+            });
         }
     }
     if opts.require_broadcastable && !off.is_empty() {

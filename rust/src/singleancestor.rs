@@ -9,14 +9,31 @@ use crate::tx::Transaction;
 /// The 26 NFT ancestor-piece names, in unlock-arg order.
 pub const PIECE_NAMES: [&str; 26] = [
     "Version",
-    "Vin1Outpoint", "Vin1FundOutpoint", "Vin1ChangeOutput", "Vin1BeneficiaryPubKeyHash",
-    "Vin1Sig", "Vin1PubKey", "Vin1CTXHeader",
-    "Vin1CTXScriptCodePubKeyHash", "Vin1CTXScriptCodePubKeyHashCommitment", "Vin1CTXScriptCodeTxoType",
-    "Vin1CTXScriptCodeParentOutpoint", "Vin1CTXScriptCodeGrandparentOutpoint",
-    "Vin1CTXFooter", "Vin1NSequence",
-    "Vin2Outpoint", "Vin2Script", "Vin2NSequence",
-    "Vout1PubKeyHash", "Vout1PubKeyHashCommitment", "Vout1TxoType", "Vout1ParentOutpoint", "Vout1GrandparentOutpoint",
-    "ChangeValue", "ChangeScript", "NLockTime",
+    "Vin1Outpoint",
+    "Vin1FundOutpoint",
+    "Vin1ChangeOutput",
+    "Vin1BeneficiaryPubKeyHash",
+    "Vin1Sig",
+    "Vin1PubKey",
+    "Vin1CTXHeader",
+    "Vin1CTXScriptCodePubKeyHash",
+    "Vin1CTXScriptCodePubKeyHashCommitment",
+    "Vin1CTXScriptCodeTxoType",
+    "Vin1CTXScriptCodeParentOutpoint",
+    "Vin1CTXScriptCodeGrandparentOutpoint",
+    "Vin1CTXFooter",
+    "Vin1NSequence",
+    "Vin2Outpoint",
+    "Vin2Script",
+    "Vin2NSequence",
+    "Vout1PubKeyHash",
+    "Vout1PubKeyHashCommitment",
+    "Vout1TxoType",
+    "Vout1ParentOutpoint",
+    "Vout1GrandparentOutpoint",
+    "ChangeValue",
+    "ChangeScript",
+    "NLockTime",
 ];
 
 /// AuthBolt's 27: PIECE_NAMES with "Vin1AuthOrMiscData" after "Vin1Outpoint".
@@ -35,12 +52,18 @@ pub struct SingleLayout {
 
 /// MinSimpleBolt: 37 args.
 pub fn min_simple_layout() -> SingleLayout {
-    SingleLayout { piece_names: PIECE_NAMES.to_vec(), has_auth: false }
+    SingleLayout {
+        piece_names: PIECE_NAMES.to_vec(),
+        has_auth: false,
+    }
 }
 
 /// AuthBolt: 39 args.
 pub fn auth_bolt_layout() -> SingleLayout {
-    SingleLayout { piece_names: auth_piece_names(), has_auth: true }
+    SingleLayout {
+        piece_names: auth_piece_names(),
+        has_auth: true,
+    }
 }
 
 /// `currentArgsStart`.
@@ -49,7 +72,12 @@ pub fn current_args_start(l: &SingleLayout) -> usize {
 }
 
 /// `ancestorPiece`: one named piece from an ancestor commit tx.
-pub fn ancestor_piece(name: &str, tx: &Transaction, leading_value_pushes: usize, layout: &SingleLayout) -> Result<Vec<u8>> {
+pub fn ancestor_piece(
+    name: &str,
+    tx: &Transaction,
+    leading_value_pushes: usize,
+    layout: &SingleLayout,
+) -> Result<Vec<u8>> {
     let in0 = match tx.inputs.first() {
         Some(i) => i,
         None => return err("Cannot read properties of undefined (reading 'unlockingScript')"),
@@ -104,13 +132,24 @@ pub fn ancestor_piece(name: &str, tx: &Transaction, leading_value_pushes: usize,
         "Vout1ParentOutpoint" => od(3),
         "Vout1GrandparentOutpoint" => od(4),
         "ChangeValue" => change.map(|c| le64(c.sats())).unwrap_or_default(),
-        "ChangeScript" => change.and_then(|c| c.locking_script.as_ref()).map(|s| s.to_binary()).unwrap_or_default(),
+        "ChangeScript" => change
+            .and_then(|c| c.locking_script.as_ref())
+            .map(|s| s.to_binary())
+            .unwrap_or_default(),
         "NLockTime" => le32(tx.lock_time),
         _ => vec![],
     })
 }
 
 /// `singleAncestorPieces`.
-pub fn single_ancestor_pieces(tx: &Transaction, leading_value_pushes: usize, layout: &SingleLayout) -> Result<Vec<Vec<u8>>> {
-    layout.piece_names.iter().map(|n| ancestor_piece(n, tx, leading_value_pushes, layout)).collect()
+pub fn single_ancestor_pieces(
+    tx: &Transaction,
+    leading_value_pushes: usize,
+    layout: &SingleLayout,
+) -> Result<Vec<Vec<u8>>> {
+    layout
+        .piece_names
+        .iter()
+        .map(|n| ancestor_piece(n, tx, leading_value_pushes, layout))
+        .collect()
 }

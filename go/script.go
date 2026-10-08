@@ -17,23 +17,23 @@ import (
 
 // Opcodes the port names (values as in @bsv/sdk OP).
 const (
-	OP_0            = 0x00
-	OP_PUSHDATA1    = 0x4c
-	OP_PUSHDATA2    = 0x4d
-	OP_PUSHDATA4    = 0x4e
-	OP_1NEGATE      = 0x4f
-	OP_IF           = 0x63
-	OP_NOTIF        = 0x64
-	OP_VERIF        = 0x65
-	OP_VERNOTIF     = 0x66
-	OP_ENDIF        = 0x68
-	OP_RETURN       = 0x6a
-	OP_DUP          = 0x76
-	OP_EQUAL        = 0x87
-	OP_EQUALVERIFY  = 0x88
-	OP_HASH160      = 0xa9
-	OP_HASH256      = 0xaa
-	OP_CHECKSIG     = 0xac
+	OP_0              = 0x00
+	OP_PUSHDATA1      = 0x4c
+	OP_PUSHDATA2      = 0x4d
+	OP_PUSHDATA4      = 0x4e
+	OP_1NEGATE        = 0x4f
+	OP_IF             = 0x63
+	OP_NOTIF          = 0x64
+	OP_VERIF          = 0x65
+	OP_VERNOTIF       = 0x66
+	OP_ENDIF          = 0x68
+	OP_RETURN         = 0x6a
+	OP_DUP            = 0x76
+	OP_EQUAL          = 0x87
+	OP_EQUALVERIFY    = 0x88
+	OP_HASH160        = 0xa9
+	OP_HASH256        = 0xaa
+	OP_CHECKSIG       = 0xac
 	OP_CHECKSIGVERIFY = 0xad
 )
 

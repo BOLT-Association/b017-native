@@ -45,7 +45,11 @@ pub struct TypeSpec {
 }
 
 /// Object.values(REGISTRY) order, which recognizeType walks.
-pub const REGISTRY_ORDER: [TokenType; 3] = [TokenType::MinSimpleBOLT, TokenType::AuthBOLT, TokenType::SimpleMultiBOLT];
+pub const REGISTRY_ORDER: [TokenType; 3] = [
+    TokenType::MinSimpleBOLT,
+    TokenType::AuthBOLT,
+    TokenType::SimpleMultiBOLT,
+];
 
 /// `sha256Hex`.
 pub fn sha256_hex(b: &[u8]) -> String {
@@ -60,9 +64,14 @@ pub fn registry(t: TokenType) -> &'static TypeSpec {
             .iter()
             .map(|&t| {
                 let (layout, suffix): (Vec<usize>, &str) = match t {
-                    TokenType::MinSimpleBOLT => (vec![20, 20, 1, 36, 36, 33], MIN_SIMPLE_LOCK_SUFFIX_HEX),
+                    TokenType::MinSimpleBOLT => {
+                        (vec![20, 20, 1, 36, 36, 33], MIN_SIMPLE_LOCK_SUFFIX_HEX)
+                    }
                     TokenType::AuthBOLT => (vec![20, 20, 1, 36, 36, 33], AUTH_BOLT_LOCK_SUFFIX_HEX),
-                    TokenType::SimpleMultiBOLT => (vec![16, 16, 20, 20, 20, 36, 1, 1, 36, 36, 33], SIMPLE_MULTI_LOCK_SUFFIX_HEX),
+                    TokenType::SimpleMultiBOLT => (
+                        vec![16, 16, 20, 20, 20, 36, 1, 1, 36, 36, 33],
+                        SIMPLE_MULTI_LOCK_SUFFIX_HEX,
+                    ),
                 };
                 TypeSpec {
                     token_type: t,
@@ -111,7 +120,16 @@ fn p2p_skeleton(lock: &Script) -> Vec<u8> {
         .chunks()
         .iter()
         .enumerate()
-        .map(|(i, c)| if i == P2P_PKH_IDX { Chunk { op: c.op, data: Some(vec![0; c.data_len()]) } } else { c.clone() })
+        .map(|(i, c)| {
+            if i == P2P_PKH_IDX {
+                Chunk {
+                    op: c.op,
+                    data: Some(vec![0; c.data_len()]),
+                }
+            } else {
+                c.clone()
+            }
+        })
         .collect();
     Script::new(chunks).to_binary()
 }

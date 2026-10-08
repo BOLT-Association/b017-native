@@ -37,7 +37,9 @@ pub fn from_beef(input: &Bin) -> Result<TxRef> {
     };
     let mut beef = Beef::from_binary(&bytes)?;
     if beef.version != BEEF_V2 {
-        return err("BEEF V1 (BRC-62) is not accepted; use BEEF V2 (BRC-96) / Atomic BEEF (BRC-95)");
+        return err(
+            "BEEF V1 (BRC-62) is not accepted; use BEEF V2 (BRC-96) / Atomic BEEF (BRC-95)",
+        );
     }
     if !beef.is_valid(false)? {
         return err("BEEF is not self-contained: a tx is neither proven by a BUMP nor has all its inputs in the BEEF");
@@ -46,13 +48,20 @@ pub fn from_beef(input: &Bin) -> Result<TxRef> {
     for (txid, tx, proven) in &entries {
         if let Some(t) = tx {
             if !proven && t.borrow().inputs.is_empty() {
-                return err(format!("BEEF is not self-contained: tx {} has no inputs and no BUMP", &txid[..txid.len().min(8)]));
+                return err(format!(
+                    "BEEF is not self-contained: tx {} has no inputs and no BUMP",
+                    &txid[..txid.len().min(8)]
+                ));
             }
         }
     }
     let subject = match &beef.atomic_txid {
         Some(a) => Some(a.clone()),
-        None => entries.iter().rev().find(|(_, t, _)| t.is_some()).map(|(id, _, _)| id.clone()),
+        None => entries
+            .iter()
+            .rev()
+            .find(|(_, t, _)| t.is_some())
+            .map(|(id, _, _)| id.clone()),
     };
     let tx = match subject {
         Some(s) => beef.find_atomic_transaction(&s)?,

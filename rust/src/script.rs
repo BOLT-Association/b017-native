@@ -35,7 +35,10 @@ impl Chunk {
         Chunk { op, data: None }
     }
     pub fn push(op: u8, data: Vec<u8>) -> Self {
-        Chunk { op, data: Some(data) }
+        Chunk {
+            op,
+            data: Some(data),
+        }
     }
     /// `chunk.data?.length ?? 0`.
     pub fn data_len(&self) -> usize {
@@ -58,7 +61,10 @@ impl Script {
 
     /// `Script.fromBinary`.
     pub fn from_binary(b: &[u8]) -> Self {
-        Script { chunks: parse_chunks(b), raw: Some(b.to_vec()) }
+        Script {
+            chunks: parse_chunks(b),
+            raw: Some(b.to_vec()),
+        }
     }
 
     /// `Script.fromHex`.
@@ -66,7 +72,7 @@ impl Script {
         if h.is_empty() {
             return Ok(Script::from_binary(&[]));
         }
-        if h.len() % 2 != 0 {
+        if !h.len().is_multiple_of(2) {
             return err("There is an uneven number of characters in the string which suggests it is not hex encoded.");
         }
         match hex_decode(h) {
@@ -127,7 +133,10 @@ pub fn chunks_from_bin(bin: &[u8]) -> Vec<Chunk> {
 
 /// boltLib `scriptChunk`: the data of chunk i, or [].
 pub fn chunk_data(s: &Script, i: usize) -> Vec<u8> {
-    s.chunks().get(i).and_then(|c| c.data.clone()).unwrap_or_default()
+    s.chunks()
+        .get(i)
+        .and_then(|c| c.data.clone())
+        .unwrap_or_default()
 }
 
 fn read_pushdata_length(op: u8, b: &[u8], pos: usize) -> (usize, usize) {
@@ -144,7 +153,10 @@ fn read_pushdata_length(op: u8, b: &[u8], pos: usize) -> (usize, usize) {
     } else if op == OP_PUSHDATA2 {
         (at(pos) | at(pos + 1) << 8, (pos + 2).min(length))
     } else {
-        let l = (at(pos) as u32) | (at(pos + 1) as u32) << 8 | (at(pos + 2) as u32) << 16 | (at(pos + 3) as u32) << 24;
+        let l = (at(pos) as u32)
+            | (at(pos + 1) as u32) << 8
+            | (at(pos + 2) as u32) << 16
+            | (at(pos + 3) as u32) << 24;
         (l as usize, (pos + 4).min(length))
     }
 }
@@ -226,7 +238,7 @@ pub fn hex_encode(b: &[u8]) -> String {
 
 /// Strict hex decode (None on odd length or a non-hex digit).
 pub fn hex_decode(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return None;
     }
     let v = |c: u8| -> Option<u8> {
@@ -247,6 +259,10 @@ pub fn hex_decode(s: &str) -> Option<Vec<u8>> {
 
 /// `Utils.toArray(str, 'hex')`: "Invalid hex string" for a non-hex character, a leading 0 for an odd length.
 pub fn js_hex_to_array(s: &str) -> crate::error::Result<Vec<u8>> {
-    let s = if s.len() % 2 != 0 { format!("0{s}") } else { s.to_string() };
+    let s = if !s.len().is_multiple_of(2) {
+        format!("0{s}")
+    } else {
+        s.to_string()
+    };
     hex_decode(&s).ok_or_else(|| crate::error::Error("Invalid hex string".into()))
 }

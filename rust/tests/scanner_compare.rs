@@ -4,7 +4,12 @@ use serde_json::Value;
 
 /// The b017 prefix of a reason whose tail is an SDK's own text, or None when the reason is all b017's.
 fn sdk_prefix(reason: &str) -> Option<String> {
-    let own_tails = ["no unlocking script", "the script evaluated false", "its source tx was not supplied", "BEEF "];
+    let own_tails = [
+        "no unlocking script",
+        "the script evaluated false",
+        "its source tx was not supplied",
+        "BEEF ",
+    ];
     let split = |prefix_end: usize| -> Option<String> {
         let tail = &reason[prefix_end..];
         if own_tails.iter().any(|t| tail.starts_with(t)) {
@@ -13,13 +18,16 @@ fn sdk_prefix(reason: &str) -> Option<String> {
             Some(reason[..prefix_end].to_string())
         }
     };
-    if reason.starts_with("script execution failed: tx ") {
-        let rest = &reason["script execution failed: tx ".len()..];
+    if let Some(rest) = reason.strip_prefix("script execution failed: tx ") {
         if let Some(p) = rest.find(": ") {
             return split("script execution failed: tx ".len() + p + 2);
         }
     }
-    for p in ["unverifiable input: ", "malformed transaction hex: ", "invalid BEEF: "] {
+    for p in [
+        "unverifiable input: ",
+        "malformed transaction hex: ",
+        "invalid BEEF: ",
+    ] {
         if reason.starts_with(p) {
             return split(p.len());
         }
@@ -55,4 +63,3 @@ pub fn compare(got: &str, want: &Value) -> Option<String> {
     }
     None
 }
-

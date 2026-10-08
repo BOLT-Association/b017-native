@@ -53,17 +53,17 @@ func expect(t *testing.T, what string, want *tried, got string, err error) {
 
 func TestSDKMerklePath(t *testing.T) {
 	var cases []struct {
-		Hex         string   `json:"hex"`
-		Txids       []string `json:"txids"`
-		Roots       []tried  `json:"roots"`
-		RootNoArg   tried    `json:"rootNoArg"`
-		Missing     tried    `json:"missing"`
-		CombineWith string   `json:"combineWith"`
-		Combined    *tried   `json:"combined"`
-		Trimmed     tried    `json:"trimmed"`
-		Corrupt     string   `json:"corrupt"`
-		CorruptLegal tried   `json:"corruptLegal"`
-		CorruptLoose tried   `json:"corruptLoose"`
+		Hex          string   `json:"hex"`
+		Txids        []string `json:"txids"`
+		Roots        []tried  `json:"roots"`
+		RootNoArg    tried    `json:"rootNoArg"`
+		Missing      tried    `json:"missing"`
+		CombineWith  string   `json:"combineWith"`
+		Combined     *tried   `json:"combined"`
+		Trimmed      tried    `json:"trimmed"`
+		Corrupt      string   `json:"corrupt"`
+		CorruptLegal tried    `json:"corruptLegal"`
+		CorruptLoose tried    `json:"corruptLoose"`
 	}
 	_ = json.Unmarshal(loadSDK(t)["merkle"], &cases)
 	for i, c := range cases {

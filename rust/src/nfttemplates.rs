@@ -68,7 +68,13 @@ impl MinSimpleTemplate {
         suffix(MIN_SIMPLE_LOCK_SUFFIX_HEX)
     }
     /// `unlock(privateKey, beneficiaryPubKeyHash, prevTxs = [], forceNoChange, forceNoFund)`.
-    pub fn unlock(signer: Rc<dyn Signer>, beneficiary: &[u8], prev_txs: Vec<TxRef>, force_no_change: bool, force_no_fund: bool) -> SingleSpendUnlock {
+    pub fn unlock(
+        signer: Rc<dyn Signer>,
+        beneficiary: &[u8],
+        prev_txs: Vec<TxRef>,
+        force_no_change: bool,
+        force_no_fund: bool,
+    ) -> SingleSpendUnlock {
         let mut p = params(signer, beneficiary, MIN_SIMPLE_UNLOCK_SUFFIX_HEX);
         p.prev_txs = prev_txs;
         p.force_no_change = force_no_change;

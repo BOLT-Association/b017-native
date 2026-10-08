@@ -17,9 +17,9 @@ const (
 	BEEF_V2     = 4022206466
 	ATOMIC_BEEF = 0x01010101
 
-	txFormatRaw         = 0
-	txFormatRawAndBump  = 1
-	txFormatTxidOnly    = 2
+	txFormatRaw        = 0
+	txFormatRawAndBump = 1
+	txFormatTxidOnly   = 2
 )
 
 // BeefTx is a TS BeefTx.

@@ -18,7 +18,9 @@ use serde_json::{json, Value};
 
 #[test]
 fn vectors_edges() {
-    let file: Value = serde_json::from_str(&std::fs::read_to_string(vectors_dir().join("edges.json")).unwrap()).unwrap();
+    let file: Value =
+        serde_json::from_str(&std::fs::read_to_string(vectors_dir().join("edges.json")).unwrap())
+            .unwrap();
     let extra = Rc::new(file["nodes"].as_object().unwrap().clone());
     let key: Rc<dyn Signer> = Rc::new(KeySigner::from_hex(&"22".repeat(32)).unwrap());
     let mut fails = vec![];
@@ -85,20 +87,33 @@ fn vectors_edges() {
             other => panic!("no Rust mapping for {other}"),
         };
         match (r.get("throws"), got) {
-            (Some(w), Ok(v)) => fails.push(format!("#{i} {fname}: reference threw {w}, Rust returned {v}")),
+            (Some(w), Ok(v)) => fails.push(format!(
+                "#{i} {fname}: reference threw {w}, Rust returned {v}"
+            )),
             (Some(w), Err(e)) => {
                 let w = w.as_str().unwrap();
                 if e.0 != w && !w.starts_with("Cannot read properties of") {
                     fails.push(format!("#{i} {fname}: error {:?}, reference {w:?}", e.0));
                 }
             }
-            (None, Err(e)) => fails.push(format!("#{i} {fname}: Rust error {e}, reference {}", r["result"])),
+            (None, Err(e)) => fails.push(format!(
+                "#{i} {fname}: Rust error {e}, reference {}",
+                r["result"]
+            )),
             (None, Ok(v)) => {
                 if v != r["result"] {
-                    fails.push(format!("#{i} {fname} {}: {v}, reference {}", a[0], r["result"]));
+                    fails.push(format!(
+                        "#{i} {fname} {}: {v}, reference {}",
+                        a[0], r["result"]
+                    ));
                 }
             }
         }
     }
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }

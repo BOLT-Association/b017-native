@@ -6,7 +6,9 @@ use std::rc::Rc;
 use crate::boltlib::{create_signature, input_source_txid, UnlockTemplate};
 use crate::error::{err, Result};
 use crate::script::{Chunk, Script, OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160};
-use crate::sighash::{format_preimage, refs_of, BoxFuture, PreimageParams, Signer, SIGNATURE_SCOPE};
+use crate::sighash::{
+    format_preimage, refs_of, BoxFuture, PreimageParams, Signer, SIGNATURE_SCOPE,
+};
 use crate::tx::Transaction;
 
 /// Pay2ProofTemplate.lock: `b017 OP_EQUALVERIFY OP_DUP OP_HASH160 <pkh> OP_EQUALVERIFY OP_CHECKSIG`.
@@ -31,8 +33,16 @@ pub struct Pay2ProofUnlock {
 }
 
 impl Pay2ProofUnlock {
-    pub fn new(signer: Rc<dyn Signer>, source_satoshis: u64, locking_script: Option<Script>) -> Self {
-        Pay2ProofUnlock { signer, source_satoshis: RefCell::new(source_satoshis), locking_script: RefCell::new(locking_script) }
+    pub fn new(
+        signer: Rc<dyn Signer>,
+        source_satoshis: u64,
+        locking_script: Option<Script>,
+    ) -> Self {
+        Pay2ProofUnlock {
+            signer,
+            source_satoshis: RefCell::new(source_satoshis),
+            locking_script: RefCell::new(locking_script),
+        }
     }
 }
 
@@ -40,7 +50,11 @@ impl UnlockTemplate for Pay2ProofUnlock {
     fn estimate_length(&self) -> usize {
         111
     }
-    fn sign<'a>(&'a self, tx: &'a Transaction, input_index: usize) -> BoxFuture<'a, Result<Script>> {
+    fn sign<'a>(
+        &'a self,
+        tx: &'a Transaction,
+        input_index: usize,
+    ) -> BoxFuture<'a, Result<Script>> {
         Box::pin(async move {
             let input = &tx.inputs[input_index];
             let source_txid = input_source_txid(tx, input_index)?;
@@ -78,7 +92,8 @@ impl UnlockTemplate for Pay2ProofUnlock {
                 lock_time: tx.lock_time,
                 scope: SIGNATURE_SCOPE,
             })?;
-            let (sig, pub_key) = create_signature(self.signer.as_ref(), &pre, SIGNATURE_SCOPE).await?;
+            let (sig, pub_key) =
+                create_signature(self.signer.as_ref(), &pre, SIGNATURE_SCOPE).await?;
             Ok(Script::new(vec![
                 Chunk::push(sig.len() as u8, sig),
                 Chunk::push(pub_key.len() as u8, pub_key),

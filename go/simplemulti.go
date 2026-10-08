@@ -19,7 +19,7 @@ type SimpleMultiTemplate struct{}
 // SMBLockArgs are lock()'s arguments after toPubKey and prevTxs.
 type SMBLockArgs struct {
 	Balance, BalanceCommit, PubKeyHashCommit, PubKeyHashCommit2, OtherGrandparentOutpoint, TxoType, OutputIndexN []byte
-	PrevVoutIdx int
+	PrevVoutIdx                                                                                                  int
 }
 
 // Lock is `lock(toPubKey, prevTxs, balance, balanceCommit, pubKeyHashCommit, pubKeyHashCommit2,
@@ -79,11 +79,11 @@ func (SimpleMultiTemplate) StaticSuffix() *Script { return MustScriptFromHex(Sim
 
 // SMBUnlockArgs are unlock()'s arguments after the signer, toPubKey and prevTxs.
 type SMBUnlockArgs struct {
-	ForceNoChange, ForceNoFund                                                       bool
-	NextBalanceCommit, NextTxoType, InputIndexN, PubKeyHash2                          []byte
-	GrandparentBoltVoutIdx, InteropBoltVoutIdx, InteropPubKeyHash, InteropOutpoint     []byte
-	InteropParentOutpoint                                                            []byte
-	AncestorTxBRef                                                                   *Transaction
+	ForceNoChange, ForceNoFund                                                     bool
+	NextBalanceCommit, NextTxoType, InputIndexN, PubKeyHash2                       []byte
+	GrandparentBoltVoutIdx, InteropBoltVoutIdx, InteropPubKeyHash, InteropOutpoint []byte
+	InteropParentOutpoint                                                          []byte
+	AncestorTxBRef                                                                 *Transaction
 }
 
 type smbUnlocker struct {

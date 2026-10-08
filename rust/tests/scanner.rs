@@ -33,7 +33,9 @@ impl Replay {
                 return Ok(c["ans"].as_bool() == Some(true) && c["ans"] == Value::Bool(true));
             }
         }
-        self.errors.borrow_mut().push(format!("Rust asked {cb}({root}, {height}), which the reference never asked"));
+        self.errors.borrow_mut().push(format!(
+            "Rust asked {cb}({root}, {height}), which the reference never asked"
+        ));
         Ok(false)
     }
 
@@ -51,13 +53,17 @@ impl Replay {
             let a = &raw["trustedIssuerPubKey"];
             o.trusted_issuer_pub_key = match a["t"].as_str() {
                 Some("str") => Some(TrustedKey::Hex(a["v"].as_str().unwrap().to_string())),
-                Some("bytes") | Some("u8") => Some(TrustedKey::Bytes(hex_decode(a["hex"].as_str().unwrap()).unwrap())),
+                Some("bytes") | Some("u8") => Some(TrustedKey::Bytes(
+                    hex_decode(a["hex"].as_str().unwrap()).unwrap(),
+                )),
                 _ => None,
             };
         }
         if raw["isKnownBlockRoot"] == "fn" {
             let me = self.clone();
-            o.is_known_block_root = Some(Rc::new(move |root: &str, height: u64| me.answer("isKnownBlockRoot", root, height)));
+            o.is_known_block_root = Some(Rc::new(move |root: &str, height: u64| {
+                me.answer("isKnownBlockRoot", root, height)
+            }));
         }
         o
     }
@@ -79,29 +85,49 @@ impl Replay {
 
 struct Tracker(Rc<Replay>);
 impl HeaderSource for Tracker {
-    fn is_valid_root_for_height<'a>(&'a self, root: &'a str, height: u64) -> BoxFuture<'a, b017::Result<bool>> {
+    fn is_valid_root_for_height<'a>(
+        &'a self,
+        root: &'a str,
+        height: u64,
+    ) -> BoxFuture<'a, b017::Result<bool>> {
         Box::pin(async move { self.0.answer("chainTracker", root, height) })
     }
 }
 
 struct Broadcaster(Rc<Replay>);
 impl AnchorBroadcaster for Broadcaster {
-    fn broadcast<'a>(&'a self, anchor: TxRef) -> BoxFuture<'a, b017::Result<AnchorBroadcastResult>> {
+    fn broadcast<'a>(
+        &'a self,
+        anchor: TxRef,
+    ) -> BoxFuture<'a, b017::Result<AnchorBroadcastResult>> {
         Box::pin(async move {
             let r = &self.0;
-            let calls: Vec<&Value> = r.rec["calls"].as_array().unwrap().iter().filter(|c| c["cb"] == "broadcast").collect();
+            let calls: Vec<&Value> = r.rec["calls"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|c| c["cb"] == "broadcast")
+                .collect();
             let k = *r.bcast.borrow();
             *r.bcast.borrow_mut() += 1;
             let c = match calls.get(k) {
                 None => {
-                    r.errors.borrow_mut().push("Rust broadcast more anchors than the reference".into());
-                    return Ok(AnchorBroadcastResult { status: Some("rejected".into()), detail: None });
+                    r.errors
+                        .borrow_mut()
+                        .push("Rust broadcast more anchors than the reference".into());
+                    return Ok(AnchorBroadcastResult {
+                        status: Some("rejected".into()),
+                        detail: None,
+                    });
                 }
                 Some(c) => *c,
             };
             let got = node_id(&anchor, &mut Default::default());
             if c["tx"].as_str() != Some(got.as_str()) {
-                r.errors.borrow_mut().push(format!("broadcast anchor {got}, reference broadcast {}", c["tx"]));
+                r.errors.borrow_mut().push(format!(
+                    "broadcast anchor {got}, reference broadcast {}",
+                    c["tx"]
+                ));
             }
             if let Some(t) = c.get("throws") {
                 return Err(t.as_str().unwrap_or("").into());
@@ -111,7 +137,11 @@ impl AnchorBroadcaster for Broadcaster {
                 return Ok(AnchorBroadcastResult::default());
             }
             Ok(AnchorBroadcastResult {
-                status: ans.get("status").map(|s| s.as_str().map(|x| x.to_string()).unwrap_or_else(|| s.to_string())),
+                status: ans.get("status").map(|s| {
+                    s.as_str()
+                        .map(|x| x.to_string())
+                        .unwrap_or_else(|| s.to_string())
+                }),
                 detail: ans["detail"].as_str().map(|s| s.to_string()),
             })
         })
@@ -127,7 +157,12 @@ fn run(name: &str, f: &dyn Fn(&Rc<Replay>) -> String) {
             skipped += 1;
             continue;
         }
-        let r = Rc::new(Replay { rec: rec.clone(), errors: Default::default(), bcast: RefCell::new(0), graph: Default::default() });
+        let r = Rc::new(Replay {
+            rec: rec.clone(),
+            errors: Default::default(),
+            bcast: RefCell::new(0),
+            graph: Default::default(),
+        });
         let got = f(&r);
         if let Some(m) = compare(&got, &rec["result"]) {
             fails.push(format!("{}: {m}", label(rec, i)));
@@ -136,18 +171,30 @@ fn run(name: &str, f: &dyn Fn(&Rc<Replay>) -> String) {
             fails.push(format!("{}: {e}", label(rec, i)));
         }
     }
-    eprintln!("{name}: {} records, {skipped} not representable (non-array batch)", recs.len());
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    eprintln!(
+        "{name}: {} records, {skipped} not representable (non-array batch)",
+        recs.len()
+    );
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }
 
 #[test]
 fn vectors_verify_events() {
-    run("verifyEvents", &|r| verify_events(&r.batch(), &r.opts()).to_json().to_string());
+    run("verifyEvents", &|r| {
+        verify_events(&r.batch(), &r.opts()).to_json().to_string()
+    });
 }
 
 #[test]
 fn vectors_verify_event() {
-    run("verifyEvent", &|r| verify_event(&r.batch(), &r.opts()).to_json().to_string());
+    run("verifyEvent", &|r| {
+        verify_event(&r.batch(), &r.opts()).to_json().to_string()
+    });
 }
 
 #[test]

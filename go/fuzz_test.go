@@ -62,7 +62,9 @@ func TestVectorsFuzz(t *testing.T) {
 			continue
 		}
 		agree++
-		var w struct{ OK bool `json:"ok"` }
+		var w struct {
+			OK bool `json:"ok"`
+		}
 		_ = json.Unmarshal(c.Result, &w)
 		if !w.OK {
 			refused++

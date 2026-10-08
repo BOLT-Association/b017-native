@@ -286,9 +286,9 @@ func reverse(b []byte) []byte {
 
 type writer struct{ b []byte }
 
-func (w *writer) bytes(b []byte) { w.b = append(w.b, b...) }
-func (w *writer) u32(v uint32)   { w.b = binary.LittleEndian.AppendUint32(w.b, v) }
-func (w *writer) u64(v uint64)   { w.b = binary.LittleEndian.AppendUint64(w.b, v) }
+func (w *writer) bytes(b []byte)  { w.b = append(w.b, b...) }
+func (w *writer) u32(v uint32)    { w.b = binary.LittleEndian.AppendUint32(w.b, v) }
+func (w *writer) u64(v uint64)    { w.b = binary.LittleEndian.AppendUint64(w.b, v) }
 func (w *writer) varint(n uint64) { w.b = append(w.b, varintBytes(n)...) }
 
 // varintBytes is TS `writeVarIntNum`.

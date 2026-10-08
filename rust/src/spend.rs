@@ -50,7 +50,12 @@ pub fn validate(p: &SpendParams) -> Result<()> {
         .iter()
         .map(|o| TransactionOutput {
             satoshis: Some(o.sats()),
-            locking_script: LockingScript::from_binary(&o.locking_script.as_ref().map(|s| s.to_binary()).unwrap_or_default()),
+            locking_script: LockingScript::from_binary(
+                &o.locking_script
+                    .as_ref()
+                    .map(|s| s.to_binary())
+                    .unwrap_or_default(),
+            ),
             change: false,
         })
         .collect();
@@ -91,17 +96,26 @@ pub fn verify_tx(tx: &mut Transaction, skip_output_check: bool) -> Result<Verify
     let txid = tx.id()?;
     for i in 0..tx.inputs.len() {
         if tx.inputs[i].source_transaction.is_none() {
-            return err(format!("Verification failed: input {i} of {txid} is missing its source transaction."));
+            return err(format!(
+                "Verification failed: input {i} of {txid} is missing its source transaction."
+            ));
         }
         if tx.inputs[i].unlocking_script.is_none() {
-            return err(format!("Verification failed: input {i} of {txid} is missing its unlocking script."));
+            return err(format!(
+                "Verification failed: input {i} of {txid} is missing its unlocking script."
+            ));
         }
         let src = match tx.inputs[i].source_output() {
             Some(o) => o,
             None => return err("Cannot read properties of undefined (reading 'satoshis')"),
         };
         input_total += src.sats();
-        let source_txid = tx.inputs[i].source_transaction.as_ref().unwrap().borrow().id()?;
+        let source_txid = tx.inputs[i]
+            .source_transaction
+            .as_ref()
+            .unwrap()
+            .borrow()
+            .id()?;
         if tx.inputs[i].source_txid.is_none() {
             tx.inputs[i].source_txid = Some(source_txid);
         }

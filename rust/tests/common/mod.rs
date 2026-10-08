@@ -6,14 +6,16 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 
 use b017::merklepath::MerklePath;
-use b017::sighash::block_on;
 use b017::script::{hex_decode, Script};
+use b017::sighash::block_on;
 use b017::sighash::{KeySigner, Signer};
 use b017::tx::{tx_ref, Input, Output, Transaction, TxRef};
 use serde_json::Value;
 
 pub fn vectors_dir() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("vectors")
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("vectors")
 }
 
 pub fn nodes() -> &'static serde_json::Map<String, Value> {
@@ -25,12 +27,17 @@ pub fn nodes() -> &'static serde_json::Map<String, Value> {
 }
 
 pub fn calls(name: &str) -> Vec<Value> {
-    let s = std::fs::read_to_string(vectors_dir().join("calls").join(format!("{name}.json"))).unwrap();
+    let s =
+        std::fs::read_to_string(vectors_dir().join("calls").join(format!("{name}.json"))).unwrap();
     serde_json::from_str(&s).unwrap()
 }
 
 pub fn label(rec: &Value, i: usize) -> String {
-    format!("#{i} {} :: {}", rec["file"].as_str().unwrap_or(""), rec["test"].as_str().unwrap_or(""))
+    format!(
+        "#{i} {} :: {}",
+        rec["file"].as_str().unwrap_or(""),
+        rec["test"].as_str().unwrap_or("")
+    )
 }
 
 /// Rebuilds tx nodes; one shared object per node id within a record, as the reference had.
@@ -46,7 +53,11 @@ impl Graph {
             return t.clone();
         }
         let extra = self.extra.clone();
-        let n = nodes().get(id).or_else(|| extra.as_ref().and_then(|e| e.get(id))).unwrap_or_else(|| panic!("unknown node {id}")).clone();
+        let n = nodes()
+            .get(id)
+            .or_else(|| extra.as_ref().and_then(|e| e.get(id)))
+            .unwrap_or_else(|| panic!("unknown node {id}"))
+            .clone();
         let t = tx_ref(Transaction::default());
         self.memo.insert(id.to_string(), t.clone());
         let mut tx = Transaction {
@@ -72,7 +83,9 @@ impl Graph {
             });
         }
         if let Some(mp) = n["mp"].as_str() {
-            tx.merkle_path = Some(Rc::new(std::cell::RefCell::new(MerklePath::from_hex(mp).unwrap())));
+            tx.merkle_path = Some(Rc::new(std::cell::RefCell::new(
+                MerklePath::from_hex(mp).unwrap(),
+            )));
         }
         *t.borrow_mut() = tx;
         t
@@ -84,7 +97,10 @@ fn js_str(s: &str) -> String {
 }
 
 /// The content address the recorder gives a tx graph (vectors/gen/ser.ts).
-pub fn node_id(t: &TxRef, memo: &mut HashMap<*const std::cell::RefCell<Transaction>, String>) -> String {
+pub fn node_id(
+    t: &TxRef,
+    memo: &mut HashMap<*const std::cell::RefCell<Transaction>, String>,
+) -> String {
     if let Some(id) = memo.get(&Rc::as_ptr(t)) {
         return id.clone();
     }
@@ -95,11 +111,26 @@ pub fn node_id(t: &TxRef, memo: &mut HashMap<*const std::cell::RefCell<Transacti
         if k > 0 {
             s.push(',');
         }
-        let txid = i.source_txid.as_deref().map(js_str).unwrap_or("null".into());
+        let txid = i
+            .source_txid
+            .as_deref()
+            .map(js_str)
+            .unwrap_or("null".into());
         let seq = i.sequence.map(|v| v.to_string()).unwrap_or("null".into());
-        let us = i.unlocking_script.as_ref().map(|u| js_str(&u.to_hex())).unwrap_or("null".into());
-        let src = i.source_transaction.as_ref().map(|x| js_str(&node_id(x, memo))).unwrap_or("null".into());
-        s.push_str(&format!(r#"{{"txid":{txid},"vout":{},"seq":{seq},"us":{us},"src":{src}}}"#, i.source_output_index));
+        let us = i
+            .unlocking_script
+            .as_ref()
+            .map(|u| js_str(&u.to_hex()))
+            .unwrap_or("null".into());
+        let src = i
+            .source_transaction
+            .as_ref()
+            .map(|x| js_str(&node_id(x, memo)))
+            .unwrap_or("null".into());
+        s.push_str(&format!(
+            r#"{{"txid":{txid},"vout":{},"seq":{seq},"us":{us},"src":{src}}}"#,
+            i.source_output_index
+        ));
     }
     s.push_str(r#"],"outs":["#);
     for (k, o) in tx.outputs.iter().enumerate() {
@@ -107,10 +138,18 @@ pub fn node_id(t: &TxRef, memo: &mut HashMap<*const std::cell::RefCell<Transacti
             s.push(',');
         }
         let sat = o.satoshis.map(|v| v.to_string()).unwrap_or("null".into());
-        let ls = o.locking_script.as_ref().map(|l| js_str(&l.to_hex())).unwrap_or("null".into());
+        let ls = o
+            .locking_script
+            .as_ref()
+            .map(|l| js_str(&l.to_hex()))
+            .unwrap_or("null".into());
         s.push_str(&format!(r#"{{"sat":{sat},"ls":{ls}}}"#));
     }
-    let mp = tx.merkle_path.as_ref().map(|m| js_str(&m.borrow().to_hex())).unwrap_or("null".into());
+    let mp = tx
+        .merkle_path
+        .as_ref()
+        .map(|m| js_str(&m.borrow().to_hex()))
+        .unwrap_or("null".into());
     s.push_str(&format!(r#"],"mp":{mp}}}"#));
     let h = b017::script::hex_encode(&b017::sighash::sha256(s.as_bytes()));
     let id = h[..32].to_string();
@@ -135,7 +174,10 @@ impl<'a> Arg<'a> {
     pub fn signer(&self) -> Rc<dyn Signer> {
         let key = match self.t() {
             "key" => self.0["hex"].as_str().unwrap().to_string(),
-            "signer" => self.0["key"].as_str().expect("signer without a recorded key").to_string(),
+            "signer" => self.0["key"]
+                .as_str()
+                .expect("signer without a recorded key")
+                .to_string(),
             other => panic!("arg {other} is not a key"),
         };
         Rc::new(KeySigner::from_hex(&key).unwrap())
@@ -154,7 +196,12 @@ impl<'a> Arg<'a> {
         match self.t() {
             "undefined" => vec![],
             "bytes" => vec![],
-            "list" => self.0["items"].as_array().unwrap().iter().map(|it| g.tx(it["id"].as_str().unwrap())).collect(),
+            "list" => self.0["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|it| g.tx(it["id"].as_str().unwrap()))
+                .collect(),
             other => panic!("prevTxs kind {other}"),
         }
     }
@@ -169,34 +216,58 @@ impl<'a> Arg<'a> {
 
 pub fn arg_at(args: &[Value], i: usize) -> Arg<'_> {
     static UNDEF: OnceLock<Value> = OnceLock::new();
-    Arg(args.get(i).unwrap_or_else(|| UNDEF.get_or_init(|| serde_json::json!({"t": "undefined"}))))
+    Arg(args
+        .get(i)
+        .unwrap_or_else(|| UNDEF.get_or_init(|| serde_json::json!({"t": "undefined"}))))
 }
 
 /// Whether a thrown message is b017's own text (exact comparison) rather than an SDK's.
 pub fn is_b017_error(msg: &str) -> bool {
     [
-        "Verification failed:", "Every output must have", "Output total greater", "BEEF ", "p2pkhUnlock requires",
-        "The input sourceTXID", "The sourceSatoshis", "The lockingScript", "input sourceTXID or", "sourceSatoshis or",
-        "lockingScript or", "authOrMiscData is", "an unfunded spend", "Mint tx not valid",
+        "Verification failed:",
+        "Every output must have",
+        "Output total greater",
+        "BEEF ",
+        "p2pkhUnlock requires",
+        "The input sourceTXID",
+        "The sourceSatoshis",
+        "The lockingScript",
+        "input sourceTXID or",
+        "sourceSatoshis or",
+        "lockingScript or",
+        "authOrMiscData is",
+        "an unfunded spend",
+        "Mint tx not valid",
     ]
     .iter()
     .any(|p| msg.starts_with(p))
 }
 
 /// Replay every recorded sign() of `name` with the template `build` makes from the recorded arguments.
-pub fn replay_sign(name: &str, build: &dyn Fn(&mut Graph, &str, &[serde_json::Value]) -> b017::Result<std::rc::Rc<dyn b017::boltlib::UnlockTemplate>>) -> Vec<String> {
+/// Builds the template a recorded sign() call used.
+pub type SignBuilder<'a> =
+    &'a dyn Fn(
+        &mut Graph,
+        &str,
+        &[serde_json::Value],
+    ) -> b017::Result<std::rc::Rc<dyn b017::boltlib::UnlockTemplate>>;
+
+pub fn replay_sign(name: &str, build: SignBuilder) -> Vec<String> {
     let mut fails = vec![];
     for (i, rec) in calls(name).iter().enumerate() {
         let mut g = Graph::default();
         let args = rec["args"].as_array().cloned().unwrap_or_default();
         let tx = g.tx(rec["tx"].as_str().unwrap());
         let idx = rec["inputIndex"].as_u64().unwrap() as usize;
-        let res = build(&mut g, rec["method"].as_str().unwrap_or("unlock"), &args).and_then(|tpl| {
-            let t = tx.borrow();
-            block_on(tpl.sign(&t, idx))
-        });
+        let res =
+            build(&mut g, rec["method"].as_str().unwrap_or("unlock"), &args).and_then(|tpl| {
+                let t = tx.borrow();
+                block_on(tpl.sign(&t, idx))
+            });
         match (rec.get("throws"), res) {
-            (Some(w), Ok(_)) => fails.push(format!("{}: TS threw {w}, Rust succeeded", label(rec, i))),
+            (Some(w), Ok(_)) => {
+                fails.push(format!("{}: TS threw {w}, Rust succeeded", label(rec, i)))
+            }
             (Some(w), Err(e)) => {
                 let w = w.as_str().unwrap();
                 if is_b017_error(w) && e.0 != w {
@@ -213,4 +284,3 @@ pub fn replay_sign(name: &str, build: &dyn Fn(&mut Graph, &str, &[serde_json::Va
     }
     fails
 }
-

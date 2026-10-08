@@ -32,7 +32,9 @@ var fields = map[TokenType][5]int{
 func field(lock *Script, t TokenType, f fieldName) []byte {
 	return ChunkData(lock, fields[t][f])
 }
-func fieldHex(lock *Script, t TokenType, f fieldName) string { return hex.EncodeToString(field(lock, t, f)) }
+func fieldHex(lock *Script, t TokenType, f fieldName) string {
+	return hex.EncodeToString(field(lock, t, f))
+}
 
 func parseOutpoint(op []byte) (string, uint32) {
 	n := len(op)
@@ -309,7 +311,7 @@ func classifyIn(in *Input, t TokenType, ids byID) cls {
 }
 
 type shape struct {
-	kind                       string
+	kind                        string
 	tokenIn, tokenOut, proofOut int
 }
 

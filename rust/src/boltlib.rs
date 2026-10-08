@@ -3,13 +3,16 @@
 use std::rc::Rc;
 
 use crate::error::{err, Result};
-use crate::script::{chunk_data, hex_decode, js_hex_to_array, Chunk, Script};
-use crate::sighash::{format_preimage, refs_of, sha256, BoxFuture, PreimageParams, Signer, SIGNATURE_SCOPE};
+use crate::script::{chunk_data, js_hex_to_array, Chunk, Script};
+use crate::sighash::{
+    format_preimage, refs_of, sha256, BoxFuture, PreimageParams, Signer, SIGNATURE_SCOPE,
+};
 use crate::tx::{reversed, varint_bytes, Transaction, Writer};
 
 /// The TS ScriptTemplate unlocker: `{ sign(tx, inputIndex), estimateLength() }`.
 pub trait UnlockTemplate {
-    fn sign<'a>(&'a self, tx: &'a Transaction, input_index: usize) -> BoxFuture<'a, Result<Script>>;
+    fn sign<'a>(&'a self, tx: &'a Transaction, input_index: usize)
+        -> BoxFuture<'a, Result<Script>>;
     fn estimate_length(&self) -> usize;
 }
 
@@ -28,14 +31,22 @@ pub fn build_change_output(tx: &Transaction, output_index: usize) -> Vec<u8> {
     };
     let mut w = Writer::default();
     w.u64(o.sats());
-    let b = o.locking_script.as_ref().map(|s| s.to_binary()).unwrap_or_default();
+    let b = o
+        .locking_script
+        .as_ref()
+        .map(|s| s.to_binary())
+        .unwrap_or_default();
     w.varint(b.len() as u64);
     w.bytes(&b);
     w.0
 }
 
 /// `createSignature`: the signer signs sha256(preimage); returns (checksig-format sig, pubkey).
-pub async fn create_signature(signer: &dyn Signer, preimage: &[u8], scope: u32) -> Result<(Vec<u8>, Vec<u8>)> {
+pub async fn create_signature(
+    signer: &dyn Signer,
+    preimage: &[u8],
+    scope: u32,
+) -> Result<(Vec<u8>, Vec<u8>)> {
     let raw = signer.sign(&sha256(preimage)).await?;
     Ok((raw.checksig_format(scope), signer.public_key()))
 }
@@ -59,7 +70,11 @@ impl UnlockTemplate for P2PKHUnlock {
     fn estimate_length(&self) -> usize {
         108
     }
-    fn sign<'a>(&'a self, tx: &'a Transaction, input_index: usize) -> BoxFuture<'a, Result<Script>> {
+    fn sign<'a>(
+        &'a self,
+        tx: &'a Transaction,
+        input_index: usize,
+    ) -> BoxFuture<'a, Result<Script>> {
         Box::pin(async move {
             let input = &tx.inputs[input_index];
             let src = input.source_output();
@@ -83,7 +98,10 @@ impl UnlockTemplate for P2PKHUnlock {
                 scope: SIGNATURE_SCOPE,
             })?;
             let (sig, pub_key) = create_signature(self.0.as_ref(), &pre, SIGNATURE_SCOPE).await?;
-            Ok(Script::new(vec![Chunk::push(sig.len() as u8, sig), Chunk::push(pub_key.len() as u8, pub_key)]))
+            Ok(Script::new(vec![
+                Chunk::push(sig.len() as u8, sig),
+                Chunk::push(pub_key.len() as u8, pub_key),
+            ]))
         })
     }
 }
@@ -184,33 +202,55 @@ pub fn spent_outpoint(tx: &Transaction, vin: usize) -> Result<Vec<u8>> {
 
 /// `vinChunk`.
 pub fn vin_chunk(tx: &Transaction, vin: usize, chunk_idx: usize) -> Vec<u8> {
-    tx.inputs.get(vin).and_then(|i| i.unlocking_script.as_ref()).map(|s| chunk_data(s, chunk_idx)).unwrap_or_default()
+    tx.inputs
+        .get(vin)
+        .and_then(|i| i.unlocking_script.as_ref())
+        .map(|s| chunk_data(s, chunk_idx))
+        .unwrap_or_default()
 }
 
 /// `vinSequence`.
 pub fn vin_sequence(tx: &Transaction, vin: usize) -> Vec<u8> {
-    tx.inputs.get(vin).map(|i| le32(i.seq())).unwrap_or_default()
+    tx.inputs
+        .get(vin)
+        .map(|i| le32(i.seq()))
+        .unwrap_or_default()
 }
 
 /// `vinScript`.
 pub fn vin_script(tx: &Transaction, vin: usize) -> Vec<u8> {
-    tx.inputs.get(vin).and_then(|i| i.unlocking_script.as_ref()).map(|s| s.to_binary()).unwrap_or_default()
+    tx.inputs
+        .get(vin)
+        .and_then(|i| i.unlocking_script.as_ref())
+        .map(|s| s.to_binary())
+        .unwrap_or_default()
 }
 
 /// `voutChunk` (TS throws for a missing output).
 pub fn vout_chunk(tx: &Transaction, vout: usize, chunk_idx: usize) -> Result<Vec<u8>> {
     match tx.outputs.get(vout) {
         None => err("Cannot read properties of undefined (reading 'lockingScript')"),
-        Some(o) => Ok(o.locking_script.as_ref().map(|s| chunk_data(s, chunk_idx)).unwrap_or_default()),
+        Some(o) => Ok(o
+            .locking_script
+            .as_ref()
+            .map(|s| chunk_data(s, chunk_idx))
+            .unwrap_or_default()),
     }
 }
 
 /// `outputValue`.
 pub fn output_value(tx: &Transaction, idx: usize) -> Vec<u8> {
-    tx.outputs.get(idx).map(|o| le64(o.sats())).unwrap_or_default()
+    tx.outputs
+        .get(idx)
+        .map(|o| le64(o.sats()))
+        .unwrap_or_default()
 }
 
 /// `outputScript`.
 pub fn output_script(tx: &Transaction, idx: usize) -> Vec<u8> {
-    tx.outputs.get(idx).and_then(|o| o.locking_script.as_ref()).map(|s| s.to_binary()).unwrap_or_default()
+    tx.outputs
+        .get(idx)
+        .and_then(|o| o.locking_script.as_ref())
+        .map(|s| s.to_binary())
+        .unwrap_or_default()
 }

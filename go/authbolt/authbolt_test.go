@@ -76,7 +76,7 @@ func present(t *testing.T, mint *b017.Transaction, owner b017.KeySigner, toPkh [
 	}
 	unlock2, _ := tpl.Unlock(owner, toPkh, []*b017.Transaction{mint, commit}, nil, false, false)
 	settle := &b017.Transaction{Version: 2,
-		Inputs: []*b017.Input{{SourceTransaction: commit, SourceOutputIndex: 0, Template: unlock2, Sequence: b017.U32(0xffffffff)}},
+		Inputs:  []*b017.Input{{SourceTransaction: commit, SourceOutputIndex: 0, Template: unlock2, Sequence: b017.U32(0xffffffff)}},
 		Outputs: []*b017.Output{{Satoshis: b017.U64(1), LockingScript: tpl.Lock(toPkh, owner.PublicKey(), make([]byte, 20), []byte{0x00}, b017.BuildOutpoint(commit, 0), mintOut)}}}
 	if err := b017.SignTx(ctx, settle); err != nil {
 		t.Fatal(err)

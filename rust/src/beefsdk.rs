@@ -29,12 +29,28 @@ pub struct BeefTx {
 
 impl BeefTx {
     fn from_tx(t: TxRef, bump_index: Option<usize>) -> Result<BeefTx> {
-        let mut b = BeefTx { bump_index, tx: RefCell::new(Some(t)), raw: None, txid: RefCell::new(None), input_txids: vec![] };
+        let mut b = BeefTx {
+            bump_index,
+            tx: RefCell::new(Some(t)),
+            raw: None,
+            txid: RefCell::new(None),
+            input_txids: vec![],
+        };
         b.update_input_txids()?;
         Ok(b)
     }
-    fn from_raw(raw: Vec<u8>, bump_index: Option<usize>, input_txids: Option<Vec<String>>) -> Result<BeefTx> {
-        let mut b = BeefTx { bump_index, tx: RefCell::new(None), raw: Some(raw), txid: RefCell::new(None), input_txids: vec![] };
+    fn from_raw(
+        raw: Vec<u8>,
+        bump_index: Option<usize>,
+        input_txids: Option<Vec<String>>,
+    ) -> Result<BeefTx> {
+        let mut b = BeefTx {
+            bump_index,
+            tx: RefCell::new(None),
+            raw: Some(raw),
+            txid: RefCell::new(None),
+            input_txids: vec![],
+        };
         if b.has_proof() {
             b.input_txids = vec![];
         } else if let Some(ids) = input_txids {
@@ -45,13 +61,21 @@ impl BeefTx {
         Ok(b)
     }
     fn txid_only(txid: String) -> BeefTx {
-        BeefTx { bump_index: None, tx: RefCell::new(None), raw: None, txid: RefCell::new(Some(txid)), input_txids: vec![] }
+        BeefTx {
+            bump_index: None,
+            tx: RefCell::new(None),
+            raw: None,
+            txid: RefCell::new(Some(txid)),
+            input_txids: vec![],
+        }
     }
     pub fn has_proof(&self) -> bool {
         self.bump_index.is_some()
     }
     pub fn is_txid_only(&self) -> bool {
-        self.txid.borrow().as_deref().is_some_and(|s| !s.is_empty()) && self.raw.is_none() && self.tx.borrow().is_none()
+        self.txid.borrow().as_deref().is_some_and(|s| !s.is_empty())
+            && self.raw.is_none()
+            && self.tx.borrow().is_none()
     }
     pub fn bump_index(&self) -> Option<usize> {
         self.bump_index
@@ -168,7 +192,12 @@ pub struct SortResult {
 
 impl Beef {
     pub fn new(version: u32) -> Beef {
-        Beef { version, bumps: vec![], txs: vec![], atomic_txid: None }
+        Beef {
+            version,
+            bumps: vec![],
+            txs: vec![],
+            atomic_txid: None,
+        }
     }
 
     /// `Beef.fromBinary` (prefix parser: trailing bytes are ignored).
@@ -181,11 +210,16 @@ impl Beef {
             version = r.u32()?;
         }
         if version != BEEF_V1 && version != BEEF_V2 {
-            return err(format!("Serialized BEEF must start with {BEEF_V1} or {BEEF_V2} but starts with {version}"));
+            return err(format!(
+                "Serialized BEEF must start with {BEEF_V1} or {BEEF_V2} but starts with {version}"
+            ));
         }
         let mut beef = Beef::new(version);
         for _ in 0..r.varint_strict()? {
-            beef.bumps.push(Rc::new(RefCell::new(MerklePath::from_reader(&mut r, false)?)));
+            beef.bumps
+                .push(Rc::new(RefCell::new(MerklePath::from_reader(
+                    &mut r, false,
+                )?)));
         }
         for _ in 0..r.varint_strict()? {
             beef.txs.push(beef_tx_from_reader(&mut r, version)?);
@@ -208,7 +242,10 @@ impl Beef {
     fn bump_index_for(&self, txid: &str) -> Option<usize> {
         let mut hit = None;
         for (i, mp) in self.bumps.iter().enumerate() {
-            if mp.borrow().path[0].iter().any(|l| l.hash.as_deref() == Some(txid)) {
+            if mp.borrow().path[0]
+                .iter()
+                .any(|l| l.hash.as_deref() == Some(txid))
+            {
                 hit = Some(i);
             }
         }
@@ -244,7 +281,10 @@ impl Beef {
             for k in 0..n {
                 let (has_src, sid) = {
                     let c = cur.borrow();
-                    (c.inputs[k].source_transaction.is_some(), c.inputs[k].source_txid.clone())
+                    (
+                        c.inputs[k].source_transaction.is_some(),
+                        c.inputs[k].source_txid.clone(),
+                    )
                 };
                 if !has_src {
                     let sid = sid.ok_or_else(|| Error("sourceTXID must be valid".into()))?;
@@ -303,9 +343,13 @@ impl Beef {
             }
         }
         let queue = remaining;
-        let ids: Vec<String> = queue.iter().map(|&i| self.txs[i].txid()).collect::<Result<_>>()?;
+        let ids: Vec<String> = queue
+            .iter()
+            .map(|&i| self.txs[i].txid())
+            .collect::<Result<_>>()?;
         let candidates: HashSet<&String> = ids.iter().collect();
-        let original: HashMap<&String, usize> = ids.iter().enumerate().map(|(k, id)| (id, k)).collect();
+        let original: HashMap<&String, usize> =
+            ids.iter().enumerate().map(|(k, id)| (id, k)).collect();
         let mut indegree: HashMap<String, i64> = HashMap::new();
         let mut dependents: HashMap<String, Vec<usize>> = HashMap::new();
         let mut round: HashMap<String, usize> = HashMap::new();
@@ -323,7 +367,9 @@ impl Beef {
             indegree.insert(ids[k].clone(), deg);
             round.insert(ids[k].clone(), 0);
         }
-        let mut ready: Vec<usize> = (0..queue.len()).filter(|&k| indegree[&ids[k]] == 0).collect();
+        let mut ready: Vec<usize> = (0..queue.len())
+            .filter(|&k| indegree[&ids[k]] == 0)
+            .collect();
         let mut processed = HashSet::new();
         let mut p = 0;
         while p < ready.len() {
@@ -368,9 +414,22 @@ impl Beef {
                 result.push(i);
             }
         }
-        let not_valid: Vec<usize> = queue.iter().enumerate().filter(|(k, _)| !processed.contains(&ids[*k])).map(|(_, &i)| i).collect();
-        let order: Vec<usize> = with_missing.iter().chain(&not_valid).chain(&txid_only).chain(&result).copied().collect();
-        let names = |l: &[usize], txs: &[BeefTx]| -> Result<Vec<String>> { l.iter().map(|&i| txs[i].txid()).collect() };
+        let not_valid: Vec<usize> = queue
+            .iter()
+            .enumerate()
+            .filter(|(k, _)| !processed.contains(&ids[*k]))
+            .map(|(_, &i)| i)
+            .collect();
+        let order: Vec<usize> = with_missing
+            .iter()
+            .chain(&not_valid)
+            .chain(&txid_only)
+            .chain(&result)
+            .copied()
+            .collect();
+        let names = |l: &[usize], txs: &[BeefTx]| -> Result<Vec<String>> {
+            l.iter().map(|&i| txs[i].txid()).collect()
+        };
         let sr = SortResult {
             missing_inputs: missing,
             not_valid: names(&not_valid, &self.txs)?,
@@ -388,13 +447,19 @@ impl Beef {
         match t.bump_index {
             Some(i) if i < self.bumps.len() => {
                 let id = t.txid()?;
-                Ok(self.bumps[i].borrow().path[0].iter().any(|l| l.hash.as_deref() == Some(id.as_str())))
+                Ok(self.bumps[i].borrow().path[0]
+                    .iter()
+                    .any(|l| l.hash.as_deref() == Some(id.as_str())))
             }
             _ => Ok(false),
         }
     }
 
-    fn collect_atomic(&self, subject: usize, by_id: &HashMap<String, usize>) -> Result<HashSet<usize>> {
+    fn collect_atomic(
+        &self,
+        subject: usize,
+        by_id: &HashMap<String, usize>,
+    ) -> Result<HashSet<usize>> {
         let mut included = HashSet::new();
         let mut stack = vec![subject];
         while let Some(i) = stack.pop() {
@@ -493,7 +558,10 @@ impl Beef {
                     return Ok(false);
                 }
                 let id = t.txid()?;
-                if !self.bumps[i].borrow().path[0].iter().any(|l| l.hash.as_deref() == Some(id.as_str())) {
+                if !self.bumps[i].borrow().path[0]
+                    .iter()
+                    .any(|l| l.hash.as_deref() == Some(id.as_str()))
+                {
                     return Ok(false);
                 }
             }
@@ -529,7 +597,10 @@ impl Beef {
         if let Some(i) = self.bump_index_for(&id) {
             self.txs[k].set_bump_index(Some(i))?;
             let mut mp = self.bumps[i].borrow_mut();
-            if let Some(l) = mp.path[0].iter_mut().find(|l| l.hash.as_deref() == Some(id.as_str())) {
+            if let Some(l) = mp.path[0]
+                .iter_mut()
+                .find(|l| l.hash.as_deref() == Some(id.as_str()))
+            {
                 l.txid = true;
             }
         }
@@ -564,13 +635,19 @@ impl Beef {
             }
         };
         let by_id = self.tx_index()?;
-        let hashes: Vec<String> = self.bumps[index].borrow().path[0].iter().filter_map(|l| l.hash.clone()).collect();
+        let hashes: Vec<String> = self.bumps[index].borrow().path[0]
+            .iter()
+            .filter_map(|l| l.hash.clone())
+            .collect();
         for h in hashes {
             if let Some(&k) = by_id.get(&h) {
                 if self.txs[k].bump_index.is_none() {
                     self.txs[k].set_bump_index(Some(index))?;
                     let mut mp = self.bumps[index].borrow_mut();
-                    if let Some(n) = mp.path[0].iter_mut().find(|n| n.hash.as_deref() == Some(h.as_str())) {
+                    if let Some(n) = mp.path[0]
+                        .iter_mut()
+                        .find(|n| n.hash.as_deref() == Some(h.as_str()))
+                    {
                         n.txid = true;
                     }
                 }
@@ -663,7 +740,9 @@ impl Beef {
     /// `toBinaryAtomic(txid)`.
     pub fn to_binary_atomic(&self, txid: &str) -> Result<Vec<u8>> {
         let by_id = self.tx_index()?;
-        let subject = *by_id.get(txid).ok_or_else(|| Error(format!("{txid} does not exist in this Beef")))?;
+        let subject = *by_id
+            .get(txid)
+            .ok_or_else(|| Error(format!("{txid} does not exist in this Beef")))?;
         let included = self.collect_atomic(subject, &by_id)?;
         let mut nb = Beef::new(self.version);
         let mut bump_map: HashMap<usize, usize> = HashMap::new();
@@ -705,7 +784,10 @@ impl Beef {
 
     /// The txs' parsed transactions and bump presence, for b017's checks after isValid.
     pub fn entries(&self) -> Result<Vec<(String, Option<TxRef>, bool)>> {
-        self.txs.iter().map(|t| Ok((t.txid()?, t.tx()?, t.bump_index.is_some()))).collect()
+        self.txs
+            .iter()
+            .map(|t| Ok((t.txid()?, t.tx()?, t.bump_index.is_some())))
+            .collect()
     }
 }
 
@@ -715,17 +797,28 @@ fn beef_tx_from_reader(r: &mut Reader, version: u32) -> Result<BeefTx> {
         if format == 2 {
             return Ok(BeefTx::txid_only(hex_encode(&reversed(&r.read(32)?))));
         }
-        let bump = if format == 1 { Some(r.varint_strict()? as usize) } else { None };
+        let bump = if format == 1 {
+            Some(r.varint_strict()? as usize)
+        } else {
+            None
+        };
         let (raw, ids) = scan_raw_transaction(r)?;
         return BeefTx::from_raw(raw, bump, Some(ids));
     }
     let (raw, ids) = scan_raw_transaction(r)?;
-    let bump = if r.u8()? != 0 { Some(r.varint_strict()? as usize) } else { None };
+    let bump = if r.u8()? != 0 {
+        Some(r.varint_strict()? as usize)
+    } else {
+        None
+    };
     BeefTx::from_raw(raw, bump, Some(ids))
 }
 
 /// Fill every input's sourceTXID from its attached source, across the attached graph.
-pub fn fill_source_txids(tx: &TxRef, seen: &mut HashSet<*const RefCell<Transaction>>) -> Result<()> {
+pub fn fill_source_txids(
+    tx: &TxRef,
+    seen: &mut HashSet<*const RefCell<Transaction>>,
+) -> Result<()> {
     if !seen.insert(Rc::as_ptr(tx)) {
         return Ok(());
     }

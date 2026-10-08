@@ -33,7 +33,7 @@ fn offset_at_height(offset: u64, height: usize) -> u64 {
     }
 }
 fn sibling_of(o: u64) -> u64 {
-    if o % 2 == 0 {
+    if o.is_multiple_of(2) {
         o + 1
     } else {
         o - 1
@@ -69,7 +69,10 @@ impl MerklePath {
             for _ in 0..n {
                 let offset = r.varint_strict()?;
                 let flags = r.u8()?;
-                let mut leaf = Leaf { offset, ..Default::default() };
+                let mut leaf = Leaf {
+                    offset,
+                    ..Default::default()
+                };
                 if flags & 1 == 1 {
                     leaf.duplicate = true;
                 } else {
@@ -84,12 +87,17 @@ impl MerklePath {
     }
 
     /// The TS constructor with validateRoots = true.
-    pub fn new(block_height: u64, path: Vec<Vec<Leaf>>, legal_offsets_only: bool) -> Result<MerklePath> {
+    pub fn new(
+        block_height: u64,
+        path: Vec<Vec<Leaf>>,
+        legal_offsets_only: bool,
+    ) -> Result<MerklePath> {
         if path.is_empty() || path.len() > 54 {
             return err("Merkle Path must contain between 1 and 54 levels");
         }
         let mp = MerklePath { block_height, path };
-        let mut legal: Vec<std::collections::BTreeSet<u64>> = vec![Default::default(); mp.path.len()];
+        let mut legal: Vec<std::collections::BTreeSet<u64>> =
+            vec![Default::default(); mp.path.len()];
         for (height, leaves) in mp.path.iter().enumerate() {
             if leaves.is_empty() && height == 0 {
                 return err(format!("Empty level at height: {height}"));
@@ -100,7 +108,10 @@ impl MerklePath {
                     return err("Invalid offset");
                 }
                 if !seen.insert(leaf.offset) {
-                    return err(format!("Duplicate offset: {}, at height: {height}", leaf.offset));
+                    return err(format!(
+                        "Duplicate offset: {}, at height: {height}",
+                        leaf.offset
+                    ));
                 }
                 if height == 0 {
                     if !leaf.duplicate {
@@ -149,7 +160,10 @@ impl MerklePath {
                 w.0.push(flags);
                 if flags & 1 == 0 {
                     // a parsed leaf's hash is always hex; a hand-built bad one serialises as zeros
-                    w.bytes(&reversed(&js_hex_to_array(leaf.hash.as_deref().unwrap_or("")).unwrap_or_else(|_| vec![0; 32])));
+                    w.bytes(&reversed(
+                        &js_hex_to_array(leaf.hash.as_deref().unwrap_or(""))
+                            .unwrap_or_else(|_| vec![0; 32]),
+                    ));
                 }
             }
         }
@@ -166,7 +180,11 @@ impl MerklePath {
             .iter()
             .find(|l| l.hash.as_deref() == Some(txid))
             .map(|l| l.offset)
-            .ok_or_else(|| Error(format!("Transaction ID {txid} not found in the Merkle Path")))
+            .ok_or_else(|| {
+                Error(format!(
+                    "Transaction ID {txid} not found in the Merkle Path"
+                ))
+            })
     }
 
     fn max_offset0(&self) -> u64 {
@@ -185,7 +203,10 @@ impl MerklePath {
     fn compute_root_opt(&self, txid: Option<&str>) -> Result<String> {
         let txid = match txid {
             Some(t) => t.to_string(),
-            None => match self.path[0].iter().find(|l| l.hash.as_deref().is_some_and(|h| !h.is_empty())) {
+            None => match self.path[0]
+                .iter()
+                .find(|l| l.hash.as_deref().is_some_and(|h| !h.is_empty()))
+            {
                 Some(l) => l.hash.clone().unwrap(),
                 None => return err("No valid leaf found in the Merkle Path"),
             },
@@ -200,7 +221,8 @@ impl MerklePath {
         for height in 0..tree_height {
             let offset = sibling_of(offset_at_height(index, height));
             let leaf = self.find_or_compute_leaf(height, offset)?;
-            let last_odd = self.path.len() == 1 && offset_at_height(index, height) == offset_at_height(max_off, height);
+            let last_odd = self.path.len() == 1
+                && offset_at_height(index, height) == offset_at_height(max_off, height);
             working = match leaf {
                 None => {
                     if last_odd {
@@ -242,14 +264,26 @@ impl MerklePath {
         let leaf1 = self.find_or_compute_leaf(h, l + 1)?;
         Ok(match leaf1 {
             Some(ref l1) if l1.hash.is_some() => {
-                let w = if l1.duplicate { hash_pair(&h0, &h0)? } else { hash_pair(l1.hash.as_deref().unwrap(), &h0)? };
-                Some(Leaf { offset, hash: Some(w), ..Default::default() })
+                let w = if l1.duplicate {
+                    hash_pair(&h0, &h0)?
+                } else {
+                    hash_pair(l1.hash.as_deref().unwrap(), &h0)?
+                };
+                Some(Leaf {
+                    offset,
+                    hash: Some(w),
+                    ..Default::default()
+                })
             }
             other => {
                 if other.as_ref().is_some_and(|l1| l1.duplicate)
                     || (self.path.len() == 1 && l == offset_at_height(self.max_offset0(), h))
                 {
-                    Some(Leaf { offset, hash: Some(hash_pair(&h0, &h0)?), ..Default::default() })
+                    Some(Leaf {
+                        offset,
+                        hash: Some(hash_pair(&h0, &h0)?),
+                        ..Default::default()
+                    })
                 } else {
                     None
                 }
@@ -303,7 +337,11 @@ impl MerklePath {
             if n.txid {
                 push_if_new(offset_at_height(n.offset, 1), &mut computed);
             } else {
-                let k = if n.offset % 2 == 1 { l.checked_sub(1) } else { Some(l + 1) };
+                let k = if n.offset % 2 == 1 {
+                    l.checked_sub(1)
+                } else {
+                    Some(l + 1)
+                };
                 let peer = match k.and_then(|k| self.path[0].get(k)) {
                     Some(p) => p,
                     None => return err("Cannot read properties of undefined (reading 'txid')"),

@@ -5,7 +5,9 @@ use std::rc::Rc;
 use crate::boltlib::{build_outpoint, le32, P2PKHUnlock};
 use crate::error::{err, Result};
 use crate::pay2proof::{pay2proof_lock, Pay2ProofUnlock};
-use crate::script::{chunk_data, hex_encode, Chunk, Script, OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160};
+use crate::script::{
+    chunk_data, hex_encode, Chunk, Script, OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160,
+};
 use crate::sighash::{hash160, Recipient, Signer};
 use crate::simplemulti::{SimpleMultiTemplate, SmbLockArgs, SmbUnlockArgs};
 use crate::spend::verify_tx;
@@ -24,7 +26,9 @@ pub fn p2pkh_lock(pkh: &[u8]) -> Script {
 }
 
 /// mint()'s default 16-byte balance.
-pub const DEFAULT_MINT_BALANCE: [u8; 16] = [0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0x1f, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const DEFAULT_MINT_BALANCE: [u8; 16] = [
+    0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0x1f, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+];
 
 /// merge()/split()'s optional { tx, vout, key }.
 #[derive(Clone, Default)]
@@ -84,11 +88,21 @@ fn seq() -> Option<u32> {
 }
 
 fn input(src: &TxRef, vout: u32, template: Rc<dyn crate::boltlib::UnlockTemplate>) -> Input {
-    Input { source_transaction: Some(src.clone()), source_output_index: vout, template: Some(template), sequence: seq(), ..Default::default() }
+    Input {
+        source_transaction: Some(src.clone()),
+        source_output_index: vout,
+        template: Some(template),
+        sequence: seq(),
+        ..Default::default()
+    }
 }
 
 fn change_out(lock: Script) -> Output {
-    Output { satoshis: None, locking_script: Some(lock), change: true }
+    Output {
+        satoshis: None,
+        locking_script: Some(lock),
+        change: true,
+    }
 }
 
 fn balance_to_u128(b: &[u8]) -> u128 {
@@ -100,10 +114,16 @@ fn balance_to_u128(b: &[u8]) -> u128 {
 
 /// The class's 128-bit LE helpers (wrapping at 2^128).
 pub fn add_balances(a: &[u8], b: &[u8]) -> Vec<u8> {
-    balance_to_u128(a).wrapping_add(balance_to_u128(b)).to_le_bytes().to_vec()
+    balance_to_u128(a)
+        .wrapping_add(balance_to_u128(b))
+        .to_le_bytes()
+        .to_vec()
 }
 pub fn subtract_balances(a: &[u8], b: &[u8]) -> Vec<u8> {
-    balance_to_u128(a).wrapping_sub(balance_to_u128(b)).to_le_bytes().to_vec()
+    balance_to_u128(a)
+        .wrapping_sub(balance_to_u128(b))
+        .to_le_bytes()
+        .to_vec()
 }
 
 impl SimpleMultiBOLT {
@@ -158,7 +178,12 @@ impl SimpleMultiBOLT {
     }
 
     /// `mint(owner, sourceTransaction, _mintData = "", balance = DEFAULT_MINT_BALANCE)` (balance None = default).
-    pub async fn mint(&mut self, owner: Rc<dyn Signer>, source: &TxRef, balance: Option<Vec<u8>>) -> Result<()> {
+    pub async fn mint(
+        &mut self,
+        owner: Rc<dyn Signer>,
+        source: &TxRef,
+        balance: Option<Vec<u8>>,
+    ) -> Result<()> {
         let balance = balance.unwrap_or(DEFAULT_MINT_BALANCE.to_vec());
         let pub_key = owner.public_key();
         let pkh_hex = hex_encode(&hash160(&pub_key));
@@ -196,7 +221,10 @@ impl SimpleMultiBOLT {
         let mint = tx_ref(Transaction {
             version: 2,
             inputs: vec![input(source, idx, Rc::new(P2PKHUnlock(owner.clone())))],
-            outputs: vec![Output::new(1, token_lock), change_out(p2pkh_lock(&self.pub_key_hash))],
+            outputs: vec![
+                Output::new(1, token_lock),
+                change_out(p2pkh_lock(&self.pub_key_hash)),
+            ],
             ..Default::default()
         });
         fee0(&mut mint.borrow_mut())?;
@@ -219,7 +247,14 @@ impl SimpleMultiBOLT {
         let pkh = hex_encode(&hash160(&key.public_key()));
         let a = ancestor.borrow();
         for i in 1..a.outputs.len().saturating_sub(1) {
-            if hex_encode(&a.outputs[i].locking_script.as_ref().map(|s| chunk_data(s, 4)).unwrap_or_default()) == pkh {
+            if hex_encode(
+                &a.outputs[i]
+                    .locking_script
+                    .as_ref()
+                    .map(|s| chunk_data(s, 4))
+                    .unwrap_or_default(),
+            ) == pkh
+            {
                 return i as u32;
             }
         }
@@ -227,7 +262,14 @@ impl SimpleMultiBOLT {
     }
 
     /// `createTransferInputs(to, _misc, isCommitTx, forceNoChange, fundOverride, forceNoFund)`.
-    pub fn create_transfer_inputs(&self, to: &Recipient, is_commit: bool, force_no_change: bool, fund_override: Option<Input>, force_no_fund: bool) -> Result<Vec<Input>> {
+    pub fn create_transfer_inputs(
+        &self,
+        to: &Recipient,
+        is_commit: bool,
+        force_no_change: bool,
+        fund_override: Option<Input>,
+        force_no_fund: bool,
+    ) -> Result<Vec<Input>> {
         let signer = self.signer()?;
         let has_ancestor = !is_commit && self.prev_txs.len() >= 3;
         let mut proof_vout = 1;
@@ -249,7 +291,11 @@ impl SimpleMultiBOLT {
                     next_txo_type: Some(vec![if is_commit { 0x21 } else { 0x20 }]),
                     input_index_n: Some(vec![0x00]),
                     pub_key_hash2: Some(vec![]),
-                    grandparent_bolt_vout_idx: Some(if has_ancestor { le32(proof_vout) } else { vec![] }),
+                    grandparent_bolt_vout_idx: Some(if has_ancestor {
+                        le32(proof_vout)
+                    } else {
+                        vec![]
+                    }),
                     ..Default::default()
                 },
             )),
@@ -262,17 +308,43 @@ impl SimpleMultiBOLT {
             }
         };
         if has_ancestor {
-            let proof = input(&self.prev_txs[self.prev_txs.len() - 3], proof_vout, Rc::new(Pay2ProofUnlock::new(signer, 0, None)));
-            return Ok(if force_no_fund { vec![token, proof] } else { vec![token, proof, funding] });
+            let proof = input(
+                &self.prev_txs[self.prev_txs.len() - 3],
+                proof_vout,
+                Rc::new(Pay2ProofUnlock::new(signer, 0, None)),
+            );
+            return Ok(if force_no_fund {
+                vec![token, proof]
+            } else {
+                vec![token, proof, funding]
+            });
         }
-        Ok(if force_no_fund { vec![token] } else { vec![token, funding] })
+        Ok(if force_no_fund {
+            vec![token]
+        } else {
+            vec![token, funding]
+        })
     }
 
     /// `createTransferOutputs(to, isCommitTx, forceNoChange, customChangeScript)`.
-    pub fn create_transfer_outputs(&self, to: &Recipient, is_commit: bool, force_no_change: bool, custom: Option<Script>) -> Result<Vec<Output>> {
+    pub fn create_transfer_outputs(
+        &self,
+        to: &Recipient,
+        is_commit: bool,
+        force_no_change: bool,
+        custom: Option<Script>,
+    ) -> Result<Vec<Output>> {
         let to_pkh = hash160(&to.pub_key());
-        let pkh_commit = if is_commit { to_pkh.clone() } else { vec![0; 20] };
-        let owner = if is_commit { self.pub_key.clone() } else { to.pub_key() };
+        let pkh_commit = if is_commit {
+            to_pkh.clone()
+        } else {
+            vec![0; 20]
+        };
+        let owner = if is_commit {
+            self.pub_key.clone()
+        } else {
+            to.pub_key()
+        };
         let lock = SimpleMultiTemplate::lock(
             &owner,
             &self.prev_txs,
@@ -289,7 +361,13 @@ impl SimpleMultiBOLT {
         )?;
         let token = Output::new(1, lock);
         let proof = Output::new(1, pay2proof_lock(&pkh_commit));
-        let change = change_out(custom.unwrap_or_else(|| p2pkh_lock(if is_commit { &self.pub_key_hash } else { &to_pkh })));
+        let change = change_out(custom.unwrap_or_else(|| {
+            p2pkh_lock(if is_commit {
+                &self.pub_key_hash
+            } else {
+                &to_pkh
+            })
+        }));
         Ok(match (is_commit, force_no_change) {
             (false, true) => vec![token],
             (false, false) => vec![token, change],
@@ -300,9 +378,30 @@ impl SimpleMultiBOLT {
 
     /// `commit(to, miscData, forceNoChange, fundOverride, forceNoFund, customChangeScript)`.
     pub async fn commit(&mut self, to: &Recipient, o: TransferOpts) -> Result<()> {
-        let inputs = self.create_transfer_inputs(to, true, o.force_no_change, o.fund_override.clone(), o.force_no_fund)?;
-        let outputs = self.create_transfer_outputs(to, true, o.force_no_change, o.custom_change_script.clone())?;
-        let tx = self.finish(Transaction { version: 2, inputs, outputs, ..Default::default() }, o.force_no_change).await?;
+        let inputs = self.create_transfer_inputs(
+            to,
+            true,
+            o.force_no_change,
+            o.fund_override.clone(),
+            o.force_no_fund,
+        )?;
+        let outputs = self.create_transfer_outputs(
+            to,
+            true,
+            o.force_no_change,
+            o.custom_change_script.clone(),
+        )?;
+        let tx = self
+            .finish(
+                Transaction {
+                    version: 2,
+                    inputs,
+                    outputs,
+                    ..Default::default()
+                },
+                o.force_no_change,
+            )
+            .await?;
         self.tx = Some(tx.clone());
         self.verify_and_log(&tx, "COMMIT TX")?;
         self.vout_idx = 0;
@@ -312,9 +411,30 @@ impl SimpleMultiBOLT {
 
     /// `settle(to, miscData, forceNoChange, fundOverride, forceNoFund, customChangeScript)`.
     pub async fn settle(&mut self, to: &Recipient, o: TransferOpts) -> Result<()> {
-        let outputs = self.create_transfer_outputs(to, false, o.force_no_change, o.custom_change_script.clone())?;
-        let inputs = self.create_transfer_inputs(to, false, o.force_no_change, o.fund_override.clone(), o.force_no_fund)?;
-        let tx = self.finish(Transaction { version: 2, inputs, outputs, ..Default::default() }, o.force_no_change).await?;
+        let outputs = self.create_transfer_outputs(
+            to,
+            false,
+            o.force_no_change,
+            o.custom_change_script.clone(),
+        )?;
+        let inputs = self.create_transfer_inputs(
+            to,
+            false,
+            o.force_no_change,
+            o.fund_override.clone(),
+            o.force_no_fund,
+        )?;
+        let tx = self
+            .finish(
+                Transaction {
+                    version: 2,
+                    inputs,
+                    outputs,
+                    ..Default::default()
+                },
+                o.force_no_change,
+            )
+            .await?;
         self.tx = Some(tx.clone());
         self.verify_and_log(&tx, "SETTLE TX")?;
         self.prev_txs.push(tx);
@@ -327,7 +447,12 @@ impl SimpleMultiBOLT {
     }
 
     /// `transfer(to, commitMisc, settleMisc, skipSettle, forceNoChange, fundOverride, forceNoFund, customChangeScript)`.
-    pub async fn transfer(&mut self, to: &Recipient, skip_settle: bool, o: TransferOpts) -> Result<()> {
+    pub async fn transfer(
+        &mut self,
+        to: &Recipient,
+        skip_settle: bool,
+        o: TransferOpts,
+    ) -> Result<()> {
         self.commit(to, o.clone()).await?;
         if !skip_settle {
             self.settle(to, o).await?;
@@ -338,7 +463,11 @@ impl SimpleMultiBOLT {
     fn parent_outpoint(&self) -> Result<Vec<u8>> {
         let t = self.cur_tx()?;
         let b = t.borrow();
-        match b.outputs.get(self.vout_idx as usize).and_then(|o| o.locking_script.as_ref()) {
+        match b
+            .outputs
+            .get(self.vout_idx as usize)
+            .and_then(|o| o.locking_script.as_ref())
+        {
             None => err("Cannot read properties of undefined (reading 'lockingScript')"),
             Some(l) => Ok(chunk_data(l, 8)),
         }
@@ -364,7 +493,12 @@ impl SimpleMultiBOLT {
     }
 
     /// `merge(other, toKey, fundingSource?)`: absorb other into this token.
-    pub async fn merge(&mut self, other: &mut SimpleMultiBOLT, to_key: &Recipient, fs: Option<FundingSource>) -> Result<()> {
+    pub async fn merge(
+        &mut self,
+        other: &mut SimpleMultiBOLT,
+        to_key: &Recipient,
+        fs: Option<FundingSource>,
+    ) -> Result<()> {
         let to_pkh = hash160(&to_key.pub_key());
         let (fund_tx, fund_vout, fund_key) = self.funding_of(&fs)?;
         let me = self.cur_tx()?;
@@ -372,52 +506,70 @@ impl SimpleMultiBOLT {
         let this_in = input(
             &me,
             self.vout_idx,
-            Rc::new(SimpleMultiTemplate::unlock(self.signer()?, &to_key.pub_key(), self.prev_txs.clone(), SmbUnlockArgs {
-                next_balance_commit: Some(other.balance.clone()),
-                next_txo_type: Some(vec![0x25]),
-                input_index_n: Some(vec![0x00]),
-                pub_key_hash2: Some(vec![]),
-                grandparent_bolt_vout_idx: Some(vec![]),
-                interop_bolt_vout_idx: Some(vec![]),
-                interop_pub_key_hash: Some(vec![]),
-                interop_outpoint: Some(build_outpoint(&ot.borrow(), other.vout_idx)?),
-                interop_parent_outpoint: Some(other.parent_outpoint()?),
-                ..Default::default()
-            })),
+            Rc::new(SimpleMultiTemplate::unlock(
+                self.signer()?,
+                &to_key.pub_key(),
+                self.prev_txs.clone(),
+                SmbUnlockArgs {
+                    next_balance_commit: Some(other.balance.clone()),
+                    next_txo_type: Some(vec![0x25]),
+                    input_index_n: Some(vec![0x00]),
+                    pub_key_hash2: Some(vec![]),
+                    grandparent_bolt_vout_idx: Some(vec![]),
+                    interop_bolt_vout_idx: Some(vec![]),
+                    interop_pub_key_hash: Some(vec![]),
+                    interop_outpoint: Some(build_outpoint(&ot.borrow(), other.vout_idx)?),
+                    interop_parent_outpoint: Some(other.parent_outpoint()?),
+                    ..Default::default()
+                },
+            )),
         );
         let other_in = input(
             &ot,
             other.vout_idx,
-            Rc::new(SimpleMultiTemplate::unlock(other.signer()?, &to_key.pub_key(), other.prev_txs.clone(), SmbUnlockArgs {
-                next_balance_commit: Some(self.balance.clone()),
-                next_txo_type: Some(vec![0x25]),
-                input_index_n: Some(vec![0x01]),
-                pub_key_hash2: Some(vec![]),
-                grandparent_bolt_vout_idx: Some(vec![]),
-                interop_bolt_vout_idx: Some(vec![]),
-                interop_pub_key_hash: Some(hash160(&self.pub_key)),
-                interop_outpoint: Some(build_outpoint(&me.borrow(), self.vout_idx)?),
-                interop_parent_outpoint: Some(self.parent_outpoint()?),
-                ..Default::default()
-            })),
+            Rc::new(SimpleMultiTemplate::unlock(
+                other.signer()?,
+                &to_key.pub_key(),
+                other.prev_txs.clone(),
+                SmbUnlockArgs {
+                    next_balance_commit: Some(self.balance.clone()),
+                    next_txo_type: Some(vec![0x25]),
+                    input_index_n: Some(vec![0x01]),
+                    pub_key_hash2: Some(vec![]),
+                    grandparent_bolt_vout_idx: Some(vec![]),
+                    interop_bolt_vout_idx: Some(vec![]),
+                    interop_pub_key_hash: Some(hash160(&self.pub_key)),
+                    interop_outpoint: Some(build_outpoint(&me.borrow(), self.vout_idx)?),
+                    interop_parent_outpoint: Some(self.parent_outpoint()?),
+                    ..Default::default()
+                },
+            )),
         );
         let fund_in = input(&fund_tx, fund_vout, Rc::new(P2PKHUnlock(fund_key)));
-        let token = SimpleMultiTemplate::lock(&self.pub_key, &self.prev_txs, &SmbLockArgs {
-            balance: Some(self.balance.clone()),
-            balance_commit: Some(other.balance.clone()),
-            pub_key_hash_commit: Some(to_pkh.clone()),
-            pub_key_hash_commit2: Some(vec![0; 20]),
-            other_grandparent_outpoint: Some(other.parent_outpoint()?),
-            txo_type: Some(vec![0x25]),
-            output_index_n: Some(vec![0x00]),
-            prev_vout_idx: self.vout_idx as usize,
-        })?;
+        let token = SimpleMultiTemplate::lock(
+            &self.pub_key,
+            &self.prev_txs,
+            &SmbLockArgs {
+                balance: Some(self.balance.clone()),
+                balance_commit: Some(other.balance.clone()),
+                pub_key_hash_commit: Some(to_pkh.clone()),
+                pub_key_hash_commit2: Some(vec![0; 20]),
+                other_grandparent_outpoint: Some(other.parent_outpoint()?),
+                txo_type: Some(vec![0x25]),
+                output_index_n: Some(vec![0x00]),
+                prev_vout_idx: self.vout_idx as usize,
+            },
+        )?;
         let commit = self
             .finish(
                 Transaction {
                     version: 2,
                     inputs: vec![this_in, other_in, fund_in],
-                    outputs: vec![Output::new(1, token), Output::new(1, pay2proof_lock(&to_pkh)), change_out(p2pkh_lock(&self.pub_key_hash))],
+                    outputs: vec![
+                        Output::new(1, token),
+                        Output::new(1, pay2proof_lock(&to_pkh)),
+                        change_out(p2pkh_lock(&self.pub_key_hash)),
+                    ],
                     ..Default::default()
                 },
                 false,
@@ -434,41 +586,61 @@ impl SimpleMultiBOLT {
         let settle_in = input(
             &commit,
             0,
-            Rc::new(SimpleMultiTemplate::unlock(self.signer()?, &to_key.pub_key(), self.prev_txs.clone(), SmbUnlockArgs {
-                next_balance_commit: Some(vec![0; 16]),
-                next_txo_type: Some(vec![0x24]),
-                input_index_n: Some(vec![0x00]),
-                pub_key_hash2: Some(vec![]),
-                grandparent_bolt_vout_idx: Some(le32(this_proof)),
-                interop_bolt_vout_idx: Some(le32(other_proof)),
-                interop_pub_key_hash: Some(vec![]),
-                interop_outpoint: Some(vec![]),
-                interop_parent_outpoint: Some(vec![]),
-                ancestor_tx_b_ref: Some(other_anc.clone()),
-                ..Default::default()
-            })),
+            Rc::new(SimpleMultiTemplate::unlock(
+                self.signer()?,
+                &to_key.pub_key(),
+                self.prev_txs.clone(),
+                SmbUnlockArgs {
+                    next_balance_commit: Some(vec![0; 16]),
+                    next_txo_type: Some(vec![0x24]),
+                    input_index_n: Some(vec![0x00]),
+                    pub_key_hash2: Some(vec![]),
+                    grandparent_bolt_vout_idx: Some(le32(this_proof)),
+                    interop_bolt_vout_idx: Some(le32(other_proof)),
+                    interop_pub_key_hash: Some(vec![]),
+                    interop_outpoint: Some(vec![]),
+                    interop_parent_outpoint: Some(vec![]),
+                    ancestor_tx_b_ref: Some(other_anc.clone()),
+                    ..Default::default()
+                },
+            )),
         );
-        let proof0 = input(&this_anc, this_proof, Rc::new(Pay2ProofUnlock::new(self.signer()?, 0, None)));
-        let proof1 = input(&other_anc, other_proof, Rc::new(Pay2ProofUnlock::new(other.signer()?, 0, None)));
+        let proof0 = input(
+            &this_anc,
+            this_proof,
+            Rc::new(Pay2ProofUnlock::new(self.signer()?, 0, None)),
+        );
+        let proof1 = input(
+            &other_anc,
+            other_proof,
+            Rc::new(Pay2ProofUnlock::new(other.signer()?, 0, None)),
+        );
         let fund_vout = commit.borrow().outputs.len() as u32 - 1;
         let settle_fund = input(&commit, fund_vout, Rc::new(P2PKHUnlock(self.signer()?)));
         let merged = add_balances(&self.balance, &other.balance);
-        let settle_token = SimpleMultiTemplate::lock(&to_key.pub_key(), &self.prev_txs, &SmbLockArgs {
-            balance: Some(merged.clone()),
-            balance_commit: Some(vec![0; 16]),
-            pub_key_hash_commit: Some(vec![0; 20]),
-            pub_key_hash_commit2: Some(vec![0; 20]),
-            other_grandparent_outpoint: Some(vec![0; 36]),
-            txo_type: Some(vec![0x24]),
-            output_index_n: Some(vec![0x00]),
-            prev_vout_idx: 0,
-        })?;
+        let settle_token = SimpleMultiTemplate::lock(
+            &to_key.pub_key(),
+            &self.prev_txs,
+            &SmbLockArgs {
+                balance: Some(merged.clone()),
+                balance_commit: Some(vec![0; 16]),
+                pub_key_hash_commit: Some(vec![0; 20]),
+                pub_key_hash_commit2: Some(vec![0; 20]),
+                other_grandparent_outpoint: Some(vec![0; 36]),
+                txo_type: Some(vec![0x24]),
+                output_index_n: Some(vec![0x00]),
+                prev_vout_idx: 0,
+            },
+        )?;
         let settle = self
             .finish(
                 Transaction {
                     version: 2,
                     inputs: vec![settle_in, proof0, proof1, settle_fund],
-                    outputs: vec![Output::new(1, settle_token), change_out(p2pkh_lock(&hash160(&to_key.pub_key())))],
+                    outputs: vec![
+                        Output::new(1, settle_token),
+                        change_out(p2pkh_lock(&hash160(&to_key.pub_key()))),
+                    ],
                     ..Default::default()
                 },
                 false,
@@ -489,7 +661,13 @@ impl SimpleMultiBOLT {
     }
 
     /// `split(toKeyA, toKeyB, splitBalanceCommit, fundingSource?)`: this becomes piece A; returns piece B.
-    pub async fn split(&mut self, to_a: &Recipient, to_b: &Recipient, split_balance_commit: &[u8], fs: Option<FundingSource>) -> Result<SimpleMultiBOLT> {
+    pub async fn split(
+        &mut self,
+        to_a: &Recipient,
+        to_b: &Recipient,
+        split_balance_commit: &[u8],
+        fs: Option<FundingSource>,
+    ) -> Result<SimpleMultiBOLT> {
         let pkh_a = hash160(&to_a.pub_key());
         let pkh_b = hash160(&to_b.pub_key());
         let (fund_tx, fund_vout, fund_key) = self.funding_of(&fs)?;
@@ -497,25 +675,34 @@ impl SimpleMultiBOLT {
         let token_in = input(
             &me,
             self.vout_idx,
-            Rc::new(SimpleMultiTemplate::unlock(self.signer()?, &to_a.pub_key(), self.prev_txs.clone(), SmbUnlockArgs {
-                next_balance_commit: Some(split_balance_commit.to_vec()),
-                next_txo_type: Some(vec![0x23]),
-                input_index_n: Some(vec![0x00]),
-                pub_key_hash2: Some(pkh_b.clone()),
-                ..Default::default()
-            })),
+            Rc::new(SimpleMultiTemplate::unlock(
+                self.signer()?,
+                &to_a.pub_key(),
+                self.prev_txs.clone(),
+                SmbUnlockArgs {
+                    next_balance_commit: Some(split_balance_commit.to_vec()),
+                    next_txo_type: Some(vec![0x23]),
+                    input_index_n: Some(vec![0x00]),
+                    pub_key_hash2: Some(pkh_b.clone()),
+                    ..Default::default()
+                },
+            )),
         );
         let fund_in = input(&fund_tx, fund_vout, Rc::new(P2PKHUnlock(fund_key)));
-        let token = SimpleMultiTemplate::lock(&self.pub_key, &self.prev_txs, &SmbLockArgs {
-            balance: Some(self.balance.clone()),
-            balance_commit: Some(split_balance_commit.to_vec()),
-            pub_key_hash_commit: Some(pkh_a.clone()),
-            pub_key_hash_commit2: Some(pkh_b.clone()),
-            other_grandparent_outpoint: Some(vec![0; 36]),
-            txo_type: Some(vec![0x23]),
-            output_index_n: Some(vec![0x00]),
-            prev_vout_idx: self.vout_idx as usize,
-        })?;
+        let token = SimpleMultiTemplate::lock(
+            &self.pub_key,
+            &self.prev_txs,
+            &SmbLockArgs {
+                balance: Some(self.balance.clone()),
+                balance_commit: Some(split_balance_commit.to_vec()),
+                pub_key_hash_commit: Some(pkh_a.clone()),
+                pub_key_hash_commit2: Some(pkh_b.clone()),
+                other_grandparent_outpoint: Some(vec![0; 36]),
+                txo_type: Some(vec![0x23]),
+                output_index_n: Some(vec![0x00]),
+                prev_vout_idx: self.vout_idx as usize,
+            },
+        )?;
         let commit = self
             .finish(
                 Transaction {
@@ -540,30 +727,43 @@ impl SimpleMultiBOLT {
         let settle_in = input(
             &commit,
             0,
-            Rc::new(SimpleMultiTemplate::unlock(self.signer()?, &[], self.prev_txs.clone(), SmbUnlockArgs {
-                next_balance_commit: Some(vec![]),
-                next_txo_type: Some(vec![0x22]),
-                input_index_n: Some(vec![0x00]),
-                pub_key_hash2: Some(vec![]),
-                grandparent_bolt_vout_idx: Some(le32(anc_proof)),
-                ..Default::default()
-            })),
+            Rc::new(SimpleMultiTemplate::unlock(
+                self.signer()?,
+                &[],
+                self.prev_txs.clone(),
+                SmbUnlockArgs {
+                    next_balance_commit: Some(vec![]),
+                    next_txo_type: Some(vec![0x22]),
+                    input_index_n: Some(vec![0x00]),
+                    pub_key_hash2: Some(vec![]),
+                    grandparent_bolt_vout_idx: Some(le32(anc_proof)),
+                    ..Default::default()
+                },
+            )),
         );
-        let proof_in = input(&anc, anc_proof, Rc::new(Pay2ProofUnlock::new(self.signer()?, 0, None)));
+        let proof_in = input(
+            &anc,
+            anc_proof,
+            Rc::new(Pay2ProofUnlock::new(self.signer()?, 0, None)),
+        );
         let fv = commit.borrow().outputs.len() as u32 - 1;
         let settle_fund = input(&commit, fv, Rc::new(P2PKHUnlock(self.signer()?)));
         let main_balance = subtract_balances(&self.balance, split_balance_commit);
         let lock_for = |pk: &[u8], bal: Vec<u8>, n: u8| {
-            SimpleMultiTemplate::lock(pk, &self.prev_txs, &SmbLockArgs {
-                balance: Some(bal),
-                balance_commit: Some(vec![0; 16]),
-                pub_key_hash_commit: Some(vec![0; 20]),
-                pub_key_hash_commit2: Some(vec![0; 20]),
-                other_grandparent_outpoint: Some(vec![0; 36]),
-                txo_type: Some(vec![0x22]),
-                output_index_n: Some(vec![n]),
-                prev_vout_idx: 0,
-            })
+            SimpleMultiTemplate::lock(
+                pk,
+                &self.prev_txs,
+                &SmbLockArgs {
+                    balance: Some(bal),
+                    balance_commit: Some(vec![0; 16]),
+                    pub_key_hash_commit: Some(vec![0; 20]),
+                    pub_key_hash_commit2: Some(vec![0; 20]),
+                    other_grandparent_outpoint: Some(vec![0; 36]),
+                    txo_type: Some(vec![0x22]),
+                    output_index_n: Some(vec![n]),
+                    prev_vout_idx: 0,
+                },
+            )
         };
         let out0 = lock_for(&to_a.pub_key(), main_balance.clone(), 0)?;
         let out1 = lock_for(&to_b.pub_key(), split_balance_commit.to_vec(), 1)?;
@@ -572,7 +772,11 @@ impl SimpleMultiBOLT {
                 Transaction {
                     version: 2,
                     inputs: vec![settle_in, proof_in, settle_fund],
-                    outputs: vec![Output::new(1, out0), Output::new(1, out1), change_out(p2pkh_lock(&hash160(&to_a.pub_key())))],
+                    outputs: vec![
+                        Output::new(1, out0),
+                        Output::new(1, out1),
+                        change_out(p2pkh_lock(&hash160(&to_a.pub_key()))),
+                    ],
                     ..Default::default()
                 },
                 false,
@@ -611,7 +815,11 @@ impl SimpleMultiBOLT {
         let tx = Transaction {
             version: 2,
             inputs: vec![
-                input(&cur, self.vout_idx, Rc::new(SimpleMultiTemplate::melt(self.signer()?, None, None))),
+                input(
+                    &cur,
+                    self.vout_idx,
+                    Rc::new(SimpleMultiTemplate::melt(self.signer()?, None, None)),
+                ),
                 input(&cur, vout, Rc::new(P2PKHUnlock(self.signer()?))),
             ],
             outputs: vec![change_out(p2pkh_lock(&pkh))],

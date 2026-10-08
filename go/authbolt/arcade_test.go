@@ -18,12 +18,12 @@ import (
 // fakeArcade answers GET /tx/{id} with the current status and POST /tx with `post`, switching the status to
 // `after` once posted.
 type fakeArcade struct {
-	mu      sync.Mutex
-	status  string
-	post    int
-	after   string
-	body    string
-	posted  bool
+	mu     sync.Mutex
+	status string
+	post   int
+	after  string
+	body   string
+	posted bool
 }
 
 func (f *fakeArcade) ServeHTTP(w http.ResponseWriter, r *http.Request) {

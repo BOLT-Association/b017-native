@@ -22,7 +22,11 @@ impl Rng {
 }
 
 fn seeds() -> Vec<Vec<u8>> {
-    calls("toAtomicBeef").iter().step_by(4).filter_map(|r| r["result"].as_str().map(|h| hex_decode(h).unwrap())).collect()
+    calls("toAtomicBeef")
+        .iter()
+        .step_by(4)
+        .filter_map(|r| r["result"].as_str().map(|h| hex_decode(h).unwrap()))
+        .collect()
 }
 
 fn mutate(r: &mut Rng, b: &[u8]) -> Vec<u8> {
@@ -55,7 +59,10 @@ fn run(iters: usize) {
         let s = Script::from_binary(&b);
         assert_eq!(s.to_binary(), b);
         let re = Script::new(s.chunks().to_vec());
-        assert_eq!(Script::from_binary(&re.to_binary()).to_binary(), re.to_binary());
+        assert_eq!(
+            Script::from_binary(&re.to_binary()).to_binary(),
+            re.to_binary()
+        );
         // tx: a parsed tx serialises to its bytes
         if let Ok(t) = Transaction::from_binary(&b) {
             assert_eq!(t.to_binary().unwrap(), b);
@@ -68,7 +75,13 @@ fn run(iters: usize) {
         let res = verify_events(&[TxInput::Bytes(b.clone())], &ScanOpts::default());
         assert!(!res.ok || res.token_type.is_some());
         let half = b.len() / 2;
-        let _ = verify_event(&[TxInput::Bytes(b[..half].to_vec()), TxInput::Bytes(b[half..].to_vec())], &ScanOpts::default());
+        let _ = verify_event(
+            &[
+                TxInput::Bytes(b[..half].to_vec()),
+                TxInput::Bytes(b[half..].to_vec()),
+            ],
+            &ScanOpts::default(),
+        );
     }
 }
 
@@ -80,6 +93,9 @@ fn fuzz_short() {
 #[test]
 #[ignore]
 fn fuzz_long() {
-    let n = std::env::var("B017_FUZZ_ITERS").ok().and_then(|s| s.parse().ok()).unwrap_or(300_000);
+    let n = std::env::var("B017_FUZZ_ITERS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(300_000);
     run(n);
 }

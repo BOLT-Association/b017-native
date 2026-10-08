@@ -12,15 +12,32 @@ pub fn fee0(tx: &mut Transaction) -> Result<()> {
     let mut total_in = 0u64;
     for (i, input) in tx.inputs.iter().enumerate() {
         let src = match &input.source_transaction {
-            None => return err("Source transactions are required for all inputs during fee computation"),
+            None => {
+                return err(
+                    "Source transactions are required for all inputs during fee computation",
+                )
+            }
             Some(s) => s,
         };
-        let o = match src.borrow().outputs.get(input.source_output_index as usize).cloned() {
-            None => return err(format!("Input {i} references a source output that does not exist.")),
+        let o = match src
+            .borrow()
+            .outputs
+            .get(input.source_output_index as usize)
+            .cloned()
+        {
+            None => {
+                return err(format!(
+                    "Input {i} references a source output that does not exist."
+                ))
+            }
             Some(o) => o,
         };
         match o.satoshis {
-            None => return err(format!("Input {i} source amount must be a non-negative safe integer")),
+            None => {
+                return err(format!(
+                    "Input {i} source amount must be a non-negative safe integer"
+                ))
+            }
             Some(s) => total_in += s,
         }
     }
@@ -30,7 +47,11 @@ pub fn fee0(tx: &mut Transaction) -> Result<()> {
             continue;
         }
         match o.satoshis {
-            None => return err(format!("Output {i} amount must be a non-negative safe integer")),
+            None => {
+                return err(format!(
+                    "Output {i} amount must be a non-negative safe integer"
+                ))
+            }
             Some(s) => total_out += s,
         }
     }
@@ -75,8 +96,14 @@ pub async fn sign_tx(tx: &TxRef) -> Result<()> {
         }
         for (i, input) in b.inputs.iter().enumerate() {
             if let Some(s) = &input.source_transaction {
-                if s.borrow().outputs.get(input.source_output_index as usize).is_none() {
-                    return err(format!("Input {i} references a source output that does not exist."));
+                if s.borrow()
+                    .outputs
+                    .get(input.source_output_index as usize)
+                    .is_none()
+                {
+                    return err(format!(
+                        "Input {i} references a source output that does not exist."
+                    ));
                 }
             }
         }

@@ -330,7 +330,9 @@ func bigToBalance(v *big.Int) []byte {
 }
 
 // AddBalances / SubtractBalances are the class's 128-bit LE helpers (wrapping at 2^128).
-func AddBalances(a, b []byte) []byte { return bigToBalance(new(big.Int).Add(balanceToBig(a), balanceToBig(b))) }
+func AddBalances(a, b []byte) []byte {
+	return bigToBalance(new(big.Int).Add(balanceToBig(a), balanceToBig(b)))
+}
 func SubtractBalances(a, b []byte) []byte {
 	return bigToBalance(new(big.Int).Sub(balanceToBig(a), balanceToBig(b)))
 }

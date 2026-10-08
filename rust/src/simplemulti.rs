@@ -3,11 +3,18 @@
 
 use std::rc::Rc;
 
-use crate::boltlib::{build_change_output, build_outpoint, create_signature, input_source_txid, le32, split_ctx, UnlockTemplate};
+use crate::boltlib::{
+    build_change_output, build_outpoint, create_signature, input_source_txid, le32, split_ctx,
+    UnlockTemplate,
+};
 use crate::error::{err, Result};
-use crate::multiboltlib::{create_empty_fungible_ancestor_chunks, smb_ancestor_piece, SMB_PIECE_NAMES};
+use crate::multiboltlib::{
+    create_empty_fungible_ancestor_chunks, smb_ancestor_piece, SMB_PIECE_NAMES,
+};
 use crate::script::{chunks_from_bin, ocs_prefix, Script};
-use crate::sighash::{format_preimage, hash160, refs_of, BoxFuture, PreimageParams, Signer, SIGNATURE_SCOPE};
+use crate::sighash::{
+    format_preimage, hash160, refs_of, BoxFuture, PreimageParams, Signer, SIGNATURE_SCOPE,
+};
 use crate::suffixes_gen::{SIMPLE_MULTI_LOCK_SUFFIX_HEX, SIMPLE_MULTI_UNLOCK_SUFFIX_HEX};
 use crate::tx::{Transaction, TxRef};
 
@@ -58,8 +65,15 @@ impl SimpleMultiTemplate {
         let prev = prev_txs.last();
         let prev_chunks = match prev {
             None => None,
-            Some(p) => match p.borrow().outputs.get(a.prev_vout_idx).and_then(|o| o.locking_script.clone()) {
-                None => return err("Cannot read properties of undefined (reading 'lockingScript')"),
+            Some(p) => match p
+                .borrow()
+                .outputs
+                .get(a.prev_vout_idx)
+                .and_then(|o| o.locking_script.clone())
+            {
+                None => {
+                    return err("Cannot read properties of undefined (reading 'lockingScript')")
+                }
                 Some(l) => Some(l.chunks().to_vec()),
             },
         };
@@ -108,26 +122,56 @@ impl SimpleMultiTemplate {
     }
 
     /// `unlock(privateKey, toPubKey, prevTxs, ...)`.
-    pub fn unlock(signer: Rc<dyn Signer>, to_pub_key: &[u8], prev_txs: Vec<TxRef>, a: SmbUnlockArgs) -> SmbUnlock {
-        SmbUnlock { signer, to_pub_key: to_pub_key.to_vec(), prev_txs, a }
+    pub fn unlock(
+        signer: Rc<dyn Signer>,
+        to_pub_key: &[u8],
+        prev_txs: Vec<TxRef>,
+        a: SmbUnlockArgs,
+    ) -> SmbUnlock {
+        SmbUnlock {
+            signer,
+            to_pub_key: to_pub_key.to_vec(),
+            prev_txs,
+            a,
+        }
     }
 
     /// `melt(privateKey, sourceSatoshis?, lockingScript?)`.
-    pub fn melt(signer: Rc<dyn Signer>, source_satoshis: Option<u64>, locking_script: Option<Script>) -> SmbMelt {
-        SmbMelt { signer, sats: source_satoshis, lock: locking_script }
+    pub fn melt(
+        signer: Rc<dyn Signer>,
+        source_satoshis: Option<u64>,
+        locking_script: Option<Script>,
+    ) -> SmbMelt {
+        SmbMelt {
+            signer,
+            sats: source_satoshis,
+            lock: locking_script,
+        }
     }
 }
 
 /// extractInputInfo (a 0 amount counts as missing, `!sourceSatoshis`).
-fn extract_input_info(tx: &Transaction, i: usize, sats: Option<u64>, lock: Option<Script>) -> Result<(String, u64, Script)> {
+fn extract_input_info(
+    tx: &Transaction,
+    i: usize,
+    sats: Option<u64>,
+    lock: Option<Script>,
+) -> Result<(String, u64, Script)> {
     let input = &tx.inputs[i];
     let txid = input_source_txid(tx, i)?;
     if txid.is_empty() {
-        return err("The input sourceTXID or sourceTransaction is required for transaction signing.");
+        return err(
+            "The input sourceTXID or sourceTransaction is required for transaction signing.",
+        );
     }
     let src = match &input.source_transaction {
         None => None,
-        Some(s) => match s.borrow().outputs.get(input.source_output_index as usize).cloned() {
+        Some(s) => match s
+            .borrow()
+            .outputs
+            .get(input.source_output_index as usize)
+            .cloned()
+        {
             None => return err("Cannot read properties of undefined (reading 'satoshis')"),
             Some(o) => Some(o),
         },
@@ -135,21 +179,32 @@ fn extract_input_info(tx: &Transaction, i: usize, sats: Option<u64>, lock: Optio
     let sats = sats.or_else(|| src.as_ref().and_then(|o| o.satoshis));
     let sats = match sats {
         Some(s) if s != 0 => s,
-        _ => return err("The sourceSatoshis or input sourceTransaction is required for transaction signing."),
+        _ => return err(
+            "The sourceSatoshis or input sourceTransaction is required for transaction signing.",
+        ),
     };
-    let lock = match lock.or_else(|| src.and_then(|o| o.locking_script)) {
-        None => return err("The lockingScript or input sourceTransaction is required for transaction signing."),
-        Some(l) => l,
-    };
+    let lock =
+        match lock.or_else(|| src.and_then(|o| o.locking_script)) {
+            None => return err(
+                "The lockingScript or input sourceTransaction is required for transaction signing.",
+            ),
+            Some(l) => l,
+        };
     Ok((txid, sats, lock))
 }
 
-fn fund_and_change(tx: &Transaction, force_no_change: bool, force_no_fund: bool) -> Result<(Vec<u8>, Vec<u8>)> {
+fn fund_and_change(
+    tx: &Transaction,
+    force_no_change: bool,
+    force_no_fund: bool,
+) -> Result<(Vec<u8>, Vec<u8>)> {
     let fund = if force_no_fund {
         vec![]
     } else {
         let input = match tx.inputs.last() {
-            None => return err("Cannot read properties of undefined (reading 'sourceTransaction')"),
+            None => {
+                return err("Cannot read properties of undefined (reading 'sourceTransaction')")
+            }
             Some(i) => i,
         };
         match &input.source_transaction {
@@ -157,7 +212,11 @@ fn fund_and_change(tx: &Transaction, force_no_change: bool, force_no_fund: bool)
             Some(s) => build_outpoint(&s.borrow(), input.source_output_index)?,
         }
     };
-    let change = if force_no_change { vec![] } else { build_change_output(tx, tx.outputs.len().wrapping_sub(1)) };
+    let change = if force_no_change {
+        vec![]
+    } else {
+        build_change_output(tx, tx.outputs.len().wrapping_sub(1))
+    };
     Ok((fund, change))
 }
 
@@ -173,7 +232,11 @@ impl UnlockTemplate for SmbUnlock {
     fn estimate_length(&self) -> usize {
         2000
     }
-    fn sign<'a>(&'a self, tx: &'a Transaction, input_index: usize) -> BoxFuture<'a, Result<Script>> {
+    fn sign<'a>(
+        &'a self,
+        tx: &'a Transaction,
+        input_index: usize,
+    ) -> BoxFuture<'a, Result<Script>> {
         Box::pin(async move {
             let a = &self.a;
             let (txid, sats, lock) = extract_input_info(tx, input_index, None, None)?;
@@ -199,13 +262,24 @@ impl UnlockTemplate for SmbUnlock {
             for_sig.extend(&c.lock_len);
             for_sig.extend(&c.lock_script_code);
             for_sig.extend(&c.footer);
-            let (sig, pub_key) = create_signature(self.signer.as_ref(), &for_sig, SIGNATURE_SCOPE).await?;
-            let to_pkh = if self.to_pub_key.is_empty() { vec![] } else { hash160(&self.to_pub_key) };
+            let (sig, pub_key) =
+                create_signature(self.signer.as_ref(), &for_sig, SIGNATURE_SCOPE).await?;
+            let to_pkh = if self.to_pub_key.is_empty() {
+                vec![]
+            } else {
+                hash160(&self.to_pub_key)
+            };
             let tx_idx = self.prev_txs.len() as i64;
             let (fund, change) = fund_and_change(tx, a.force_no_change, a.force_no_fund)?;
             let anc_idx = tx_idx - 3;
             let has_ancestor = anc_idx >= 1 && tx_idx >= 4 && tx_idx % 2 == 0;
-            let ancestor = if has_ancestor { Some(Transaction::from_hex(&self.prev_txs[anc_idx as usize].borrow().to_hex()?)?) } else { None };
+            let ancestor = if has_ancestor {
+                Some(Transaction::from_hex(
+                    &self.prev_txs[anc_idx as usize].borrow().to_hex()?,
+                )?)
+            } else {
+                None
+            };
             let mut out = vec![];
             for p in SMB_PIECE_NAMES {
                 let b = match &ancestor {
@@ -267,9 +341,14 @@ impl UnlockTemplate for SmbMelt {
     fn estimate_length(&self) -> usize {
         400
     }
-    fn sign<'a>(&'a self, tx: &'a Transaction, input_index: usize) -> BoxFuture<'a, Result<Script>> {
+    fn sign<'a>(
+        &'a self,
+        tx: &'a Transaction,
+        input_index: usize,
+    ) -> BoxFuture<'a, Result<Script>> {
         Box::pin(async move {
-            let (txid, sats, lock) = extract_input_info(tx, input_index, self.sats, self.lock.clone())?;
+            let (txid, sats, lock) =
+                extract_input_info(tx, input_index, self.sats, self.lock.clone())?;
             let input = &tx.inputs[input_index];
             let pre = format_preimage(&PreimageParams {
                 source_txid: &txid,
@@ -284,14 +363,31 @@ impl UnlockTemplate for SmbMelt {
                 lock_time: tx.lock_time,
                 scope: SIGNATURE_SCOPE,
             })?;
-            let (sig, pub_key) = create_signature(self.signer.as_ref(), &pre, SIGNATURE_SCOPE).await?;
+            let (sig, pub_key) =
+                create_signature(self.signer.as_ref(), &pre, SIGNATURE_SCOPE).await?;
             let (fund, change) = fund_and_change(tx, false, false)?;
             let mut out = create_empty_fungible_ancestor_chunks();
             for _ in 0..5 {
                 out.extend(chunks_from_bin(&[]));
             }
             let pkh = hash160(&pub_key);
-            for b in [fund, change, pkh, vec![], vec![], vec![], vec![], sig, pub_key, vec![], vec![], vec![], vec![], vec![], vec![]] {
+            for b in [
+                fund,
+                change,
+                pkh,
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                sig,
+                pub_key,
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            ] {
                 out.extend(chunks_from_bin(&b));
             }
             out.extend_from_slice(unlock_suffix().chunks());

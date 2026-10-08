@@ -62,7 +62,11 @@ impl Output {
     }
     /// An output with an amount and a lock.
     pub fn new(satoshis: u64, lock: Script) -> Self {
-        Output { satoshis: Some(satoshis), locking_script: Some(lock), change: false }
+        Output {
+            satoshis: Some(satoshis),
+            locking_script: Some(lock),
+            change: false,
+        }
     }
 }
 
@@ -138,10 +142,13 @@ impl Transaction {
         w.bytes(&[0, 0, 0, 0, 0, 0xef]);
         w.varint(self.inputs.len() as u64);
         for i in &self.inputs {
-            let src = match &i.source_transaction {
-                None => return err("All inputs must have source transactions when serializing to EF format"),
-                Some(s) => s,
-            };
+            let src =
+                match &i.source_transaction {
+                    None => return err(
+                        "All inputs must have source transactions when serializing to EF format",
+                    ),
+                    Some(s) => s,
+                };
             match &i.source_txid {
                 None => w.bytes(&src.borrow().hash()?),
                 Some(id) => w.bytes(&reversed(&require_txid(id)?)),
@@ -197,7 +204,10 @@ impl Transaction {
 }
 
 fn read_transaction(r: &mut Reader) -> Result<Transaction> {
-    let mut t = Transaction { version: r.u32()?, ..Default::default() };
+    let mut t = Transaction {
+        version: r.u32()?,
+        ..Default::default()
+    };
     let n = r.varint_strict()?;
     for _ in 0..n {
         let id = r.read(32)?;
@@ -348,7 +358,13 @@ impl<'a> Reader<'a> {
     /// TS `readVarIntNum` (non-strict), on the TS array Reader (its own error text).
     pub fn varint(&mut self) -> Result<u64> {
         let r = self.varint_inner();
-        r.map_err(|e| if e.0.starts_with("ReaderUint8Array") { Error("Reader read exceeds available data".into()) } else { e })
+        r.map_err(|e| {
+            if e.0.starts_with("ReaderUint8Array") {
+                Error("Reader read exceeds available data".into())
+            } else {
+                e
+            }
+        })
     }
     fn varint_inner(&mut self) -> Result<u64> {
         match self.u8()? {

@@ -41,9 +41,19 @@ fn sdk_merkle_path() {
             fails.push(format!("#{i}: round trip"));
         }
         for (k, txid) in c["txids"].as_array().unwrap().iter().enumerate() {
-            expect(&mut fails, &format!("#{i} root"), &c["roots"][k], mp.compute_root(txid.as_str().unwrap()));
+            expect(
+                &mut fails,
+                &format!("#{i} root"),
+                &c["roots"][k],
+                mp.compute_root(txid.as_str().unwrap()),
+            );
         }
-        expect(&mut fails, &format!("#{i} root()"), &c["rootNoArg"], mp.compute_root(""));
+        expect(
+            &mut fails,
+            &format!("#{i} root()"),
+            &c["rootNoArg"],
+            mp.compute_root(""),
+        );
         if let Some(w) = c["combineWith"].as_str() {
             let mut a = MerklePath::from_hex(h).unwrap();
             let b = MerklePath::from_hex(w).unwrap();
@@ -54,10 +64,25 @@ fn sdk_merkle_path() {
         let r = w.trim().map(|_| w.to_hex());
         expect(&mut fails, &format!("#{i} trim"), &c["trimmed"], r);
         let bad = hex_decode(c["corrupt"].as_str().unwrap()).unwrap();
-        expect(&mut fails, &format!("#{i} corrupt legal"), &c["corruptLegal"], MerklePath::from_binary(&bad, true).map(|m| m.to_hex()));
-        expect(&mut fails, &format!("#{i} corrupt loose"), &c["corruptLoose"], MerklePath::from_binary(&bad, false).map(|m| m.to_hex()));
+        expect(
+            &mut fails,
+            &format!("#{i} corrupt legal"),
+            &c["corruptLegal"],
+            MerklePath::from_binary(&bad, true).map(|m| m.to_hex()),
+        );
+        expect(
+            &mut fails,
+            &format!("#{i} corrupt loose"),
+            &c["corruptLoose"],
+            MerklePath::from_binary(&bad, false).map(|m| m.to_hex()),
+        );
     }
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }
 
 #[test]
@@ -71,7 +96,10 @@ fn sdk_scripts() {
             .as_array()
             .unwrap()
             .iter()
-            .map(|x| Chunk { op: x["op"].as_u64().unwrap() as u8, data: x["data"].as_str().map(|d| hex_decode(d).unwrap()) })
+            .map(|x| Chunk {
+                op: x["op"].as_u64().unwrap() as u8,
+                data: x["data"].as_str().map(|d| hex_decode(d).unwrap()),
+            })
             .collect();
         if sc.chunks() != want.as_slice() {
             fails.push(format!("#{i} {h}: chunks differ"));
@@ -87,11 +115,20 @@ fn sdk_scripts() {
         if let Some(w) = e["result"]["throws"].as_str() {
             match Script::from_hex(e["hex"].as_str().unwrap()) {
                 Err(err) if err.0 == w => {}
-                other => fails.push(format!("fromHex({}): {:?}, reference {w:?}", e["hex"], other.map(|s| s.to_hex()))),
+                other => fails.push(format!(
+                    "fromHex({}): {:?}, reference {w:?}",
+                    e["hex"],
+                    other.map(|s| s.to_hex())
+                )),
             }
         }
     }
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }
 
 #[test]
@@ -108,9 +145,24 @@ fn sdk_transactions() {
         for inp in tx.inputs.iter_mut() {
             inp.source_transaction = Some(src.clone());
         }
-        expect(&mut fails, &format!("#{i} ef"), &c["ef"], tx.to_binary_ef().map(|b| hex_encode(&b)));
-        expect(&mut fails, &format!("#{i} truncated"), &c["truncatedResult"], Transaction::from_hex(c["truncated"].as_str().unwrap()).and_then(|t| t.id()));
-        expect(&mut fails, &format!("#{i} padded"), &c["paddedResult"], Transaction::from_hex(c["padded"].as_str().unwrap()).and_then(|t| t.id()));
+        expect(
+            &mut fails,
+            &format!("#{i} ef"),
+            &c["ef"],
+            tx.to_binary_ef().map(|b| hex_encode(&b)),
+        );
+        expect(
+            &mut fails,
+            &format!("#{i} truncated"),
+            &c["truncatedResult"],
+            Transaction::from_hex(c["truncated"].as_str().unwrap()).and_then(|t| t.id()),
+        );
+        expect(
+            &mut fails,
+            &format!("#{i} padded"),
+            &c["paddedResult"],
+            Transaction::from_hex(c["padded"].as_str().unwrap()).and_then(|t| t.id()),
+        );
         for (k, inp) in tx.inputs.iter().enumerate() {
             let out = src.borrow().outputs[inp.source_output_index as usize].clone();
             for (si, scope) in scopes.iter().enumerate() {
@@ -134,14 +186,23 @@ fn sdk_transactions() {
             }
         }
     }
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }
 
 #[test]
 fn sdk_beef() {
     let mut fails = vec![];
     for (i, c) in sdk()["beefs"].as_array().unwrap().iter().enumerate() {
-        for (what, input, want) in [("v2", &c["v2"], &c["v2parsed"]), ("atomic", &c["atomic"], &c["atomicParsed"]), ("v1", &c["v1"], &c["v1parsed"])] {
+        for (what, input, want) in [
+            ("v2", &c["v2"], &c["v2parsed"]),
+            ("atomic", &c["atomic"], &c["atomicParsed"]),
+            ("v1", &c["v1"], &c["v1parsed"]),
+        ] {
             let h = match input["ok"].as_str() {
                 Some(h) => h,
                 None => continue,
@@ -168,12 +229,24 @@ fn sdk_beef() {
             let w = &want["ok"];
             let v = b.is_valid(false).unwrap();
             let vt = b.is_valid(true).unwrap();
-            let order: Vec<Value> = b.entries().unwrap().into_iter().map(|(id, _, _)| Value::String(id)).collect();
-            if v != w["valid"] || vt != w["validTxidOnly"] || Value::Array(order) != w["order"] || b.atomic_txid.as_deref() != w["atomic"].as_str() {
+            let order: Vec<Value> = b
+                .entries()
+                .unwrap()
+                .into_iter()
+                .map(|(id, _, _)| Value::String(id))
+                .collect();
+            if v != w["valid"]
+                || vt != w["validTxidOnly"]
+                || Value::Array(order) != w["order"]
+                || b.atomic_txid.as_deref() != w["atomic"].as_str()
+            {
                 fails.push(format!("#{i} {what}: valid/order/atomic differ"));
             }
         }
-        if let (Some(h), true) = (c["atomic"]["ok"].as_str(), c["atomicParsed"]["ok"]["valid"] == true) {
+        if let (Some(h), true) = (
+            c["atomic"]["ok"].as_str(),
+            c["atomicParsed"]["ok"]["valid"] == true,
+        ) {
             if let Ok(t) = from_beef(&Bin::Hex(h)) {
                 match to_atomic_beef(&t) {
                     Ok(b) if hex_encode(&b) == h => {}
@@ -182,7 +255,12 @@ fn sdk_beef() {
             }
         }
     }
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }
 
 #[test]
@@ -194,7 +272,12 @@ fn sdk_atomics_and_fees() {
         let mut g = Graph::default();
         g.extra = Some(extra.clone());
         let tx = g.tx(a["tx"].as_str().unwrap());
-        expect(&mut fails, &format!("#{i} atomic"), &a["atomic"], to_atomic_beef(&tx).map(|b| hex_encode(&b)));
+        expect(
+            &mut fails,
+            &format!("#{i} atomic"),
+            &a["atomic"],
+            to_atomic_beef(&tx).map(|b| hex_encode(&b)),
+        );
         let w = &a["extra"]["ok"];
         if w.is_null() {
             continue;
@@ -203,8 +286,17 @@ fn sdk_atomics_and_fees() {
         let v = beef.is_valid(false).unwrap();
         let vt = beef.is_valid(true).unwrap();
         let id = tx.borrow().id().unwrap();
-        let order: Vec<Value> = beef.entries().unwrap().into_iter().map(|(t, _, _)| Value::String(t)).collect();
-        if v != w["valid"] || vt != w["validTxidOnly"] || beef.is_atomic(&id).unwrap() != w["atomicForSubject"] || Value::Array(order) != w["order"] {
+        let order: Vec<Value> = beef
+            .entries()
+            .unwrap()
+            .into_iter()
+            .map(|(t, _, _)| Value::String(t))
+            .collect();
+        if v != w["valid"]
+            || vt != w["validTxidOnly"]
+            || beef.is_atomic(&id).unwrap() != w["atomicForSubject"]
+            || Value::Array(order) != w["order"]
+        {
             fails.push(format!("#{i} extra: differs"));
         }
     }
@@ -212,15 +304,30 @@ fn sdk_atomics_and_fees() {
         use b017::multibolt::p2pkh_lock;
         use b017::tx::{Input, Output};
         let b = &f["before"];
-        let src = tx_ref(Transaction { version: 1, outputs: vec![Output::new(b["in"].as_u64().unwrap(), p2pkh_lock(&[0; 20]))], ..Default::default() });
+        let src = tx_ref(Transaction {
+            version: 1,
+            outputs: vec![Output::new(b["in"].as_u64().unwrap(), p2pkh_lock(&[0; 20]))],
+            ..Default::default()
+        });
         let mut tx = Transaction {
             version: 2,
-            inputs: vec![Input { source_transaction: Some(src), unlocking_script: Some(Script::default()), ..Default::default() }],
-            outputs: vec![Output::new(b["fixed"].as_u64().unwrap(), p2pkh_lock(&[0; 20]))],
+            inputs: vec![Input {
+                source_transaction: Some(src),
+                unlocking_script: Some(Script::default()),
+                ..Default::default()
+            }],
+            outputs: vec![Output::new(
+                b["fixed"].as_u64().unwrap(),
+                p2pkh_lock(&[0; 20]),
+            )],
             ..Default::default()
         };
         for _ in 0..b["changes"].as_u64().unwrap() {
-            tx.outputs.push(Output { satoshis: None, locking_script: Some(p2pkh_lock(&[0; 20])), change: true });
+            tx.outputs.push(Output {
+                satoshis: None,
+                locking_script: Some(p2pkh_lock(&[0; 20])),
+                change: true,
+            });
         }
         b017::txbuild::fee0(&mut tx).unwrap();
         let got: Vec<Value> = tx.outputs.iter().map(|o| Value::from(o.sats())).collect();
@@ -228,7 +335,12 @@ fn sdk_atomics_and_fees() {
             fails.push(format!("#{i} fee(0) differs"));
         }
     }
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }
 
 #[test]
@@ -249,9 +361,17 @@ fn sdk_corruption_and_path_rules() {
                 exact += 1;
             }
         }
-        expect(&mut fails, &format!("#{i} {}", c["kind"]), &c["result"], got);
+        expect(
+            &mut fails,
+            &format!("#{i} {}", c["kind"]),
+            &c["result"],
+            got,
+        );
     }
-    eprintln!("corruption: {} cases, {exact} errors word for word", s["corrupt"].as_array().unwrap().len());
+    eprintln!(
+        "corruption: {} cases, {exact} errors word for word",
+        s["corrupt"].as_array().unwrap().len()
+    );
     for (i, sh) in s["shapes"].as_array().unwrap().iter().enumerate() {
         let path: Vec<Vec<Leaf>> = sh["path"]
             .as_array()
@@ -279,5 +399,10 @@ fn sdk_corruption_and_path_rules() {
         }
         expect(&mut fails, &format!("path #{i}"), &sh["result"], got);
     }
-    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+    assert!(
+        fails.is_empty(),
+        "{} failures:\n{}",
+        fails.len(),
+        fails.join("\n")
+    );
 }

@@ -105,7 +105,11 @@ pub fn format_preimage(p: &PreimageParams) -> Result<Vec<u8>> {
     }
     let write_out = |w: &mut Writer, o: &Output| {
         w.u64(o.sats());
-        let s = o.locking_script.as_ref().map(|s| s.to_binary()).unwrap_or_default();
+        let s = o
+            .locking_script
+            .as_ref()
+            .map(|s| s.to_binary())
+            .unwrap_or_default();
         w.varint(s.len() as u64);
         w.bytes(&s);
     };
@@ -200,7 +204,9 @@ pub struct KeySigner(pub PrivateKey);
 
 impl KeySigner {
     pub fn from_hex(h: &str) -> Result<Self> {
-        PrivateKey::from_hex(h).map(KeySigner).map_err(|e| Error(e.to_string()))
+        PrivateKey::from_hex(h)
+            .map(KeySigner)
+            .map_err(|e| Error(e.to_string()))
     }
 }
 
@@ -211,7 +217,10 @@ impl Signer for KeySigner {
     fn sign<'a>(&'a self, msg: &'a [u8]) -> BoxFuture<'a, Result<Signature>> {
         Box::pin(async move {
             let sig = self.0.sign(msg, true).map_err(|e| Error(e.to_string()))?;
-            Ok(Signature { r: sig.r().to_array(Endian::Big, None), s: sig.s().to_array(Endian::Big, None) })
+            Ok(Signature {
+                r: sig.r().to_array(Endian::Big, None),
+                s: sig.s().to_array(Endian::Big, None),
+            })
         })
     }
 }
