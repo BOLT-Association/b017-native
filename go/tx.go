@@ -368,7 +368,7 @@ func (r *reader) varintStrict() (uint64, error) {
 			return 0, err
 		}
 		if v < 0xfd {
-			return 0, errors.New("Non-canonical varint")
+			return 0, errors.New("non-canonical varInt")
 		}
 		return uint64(v), nil
 	case 0xfe:
@@ -377,7 +377,7 @@ func (r *reader) varintStrict() (uint64, error) {
 			return 0, err
 		}
 		if v <= 0xffff {
-			return 0, errors.New("Non-canonical varint")
+			return 0, errors.New("non-canonical varInt")
 		}
 		return uint64(v), nil
 	case 0xff:
@@ -386,7 +386,10 @@ func (r *reader) varintStrict() (uint64, error) {
 			return 0, err
 		}
 		if v <= 0xffffffff {
-			return 0, errors.New("Non-canonical varint")
+			return 0, errors.New("non-canonical varInt")
+		}
+		if v > maxSafeInteger {
+			return 0, errors.New("number too large to retain precision - use readVarIntBn")
 		}
 		return v, nil
 	default:

@@ -238,6 +238,11 @@ test('write sdk vectors', async () => {
       corrupt.push({ kind: 'tx', hex: h, result: tryRun(() => Transaction.fromHex(h).id('hex')) })
     }
   }
+  // varint rules: non-canonical widths and values beyond 2^53 in a tx's input count
+  for (const vi of ['fd0100', 'fdfd00', 'fe00000100', 'feffff0000', 'ff0000000001000000', 'ffffffffffffff1f00', 'ffffffffffffffffff', 'ff0000000000002000']) {
+    const h = '02000000' + vi + '00000000'
+    corrupt.push({ kind: 'tx', hex: h, result: tryRun(() => Transaction.fromHex(h).id('hex')) })
+  }
   // ---- MerklePath constructor rules ----
   const shapes: any[] = []
   const leaf = (offset: number, extra: any = {}) => ({ offset, hash: hex(rbytes(32)), ...extra })

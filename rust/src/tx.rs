@@ -291,7 +291,7 @@ impl<'a> Reader<'a> {
         self.pos >= self.b.len()
     }
     pub fn read(&mut self, n: usize) -> Result<Vec<u8>> {
-        if self.pos + n > self.b.len() {
+        if self.pos.checked_add(n).is_none_or(|end| end > self.b.len()) {
             return Err(Error("ReaderUint8Array read exceeds available data".into()));
         }
         let out = self.b[self.pos..self.pos + n].to_vec();
@@ -321,21 +321,24 @@ impl<'a> Reader<'a> {
             0xfd => {
                 let v = self.u16()?;
                 if v < 0xfd {
-                    return err("Non-canonical varint");
+                    return err("non-canonical varInt");
                 }
                 Ok(v as u64)
             }
             0xfe => {
                 let v = self.u32()?;
                 if v <= 0xffff {
-                    return err("Non-canonical varint");
+                    return err("non-canonical varInt");
                 }
                 Ok(v as u64)
             }
             0xff => {
                 let v = self.u64()?;
                 if v <= 0xffff_ffff {
-                    return err("Non-canonical varint");
+                    return err("non-canonical varInt");
+                }
+                if v > (1u64 << 53) - 1 {
+                    return err("number too large to retain precision - use readVarIntBn");
                 }
                 Ok(v)
             }
