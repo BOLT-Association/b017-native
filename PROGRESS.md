@@ -11,7 +11,7 @@ Reference: `../b017` (branch `async-signer`, commit `a305f58`), read-only. Its `
 | 1 primitives | Go done (Rust pending) |
 | 2 NFT path | Go done (Rust pending) |
 | 3 scanner | Go done (Rust pending) |
-| 4 fungible | not started |
+| 4 fungible | Go done (Rust pending) |
 | 5 hardening + p2p adapter | not started |
 
 ## Vectors (Phase 0)
@@ -82,6 +82,14 @@ cd ../b017-native && node vectors/gen/pack.mjs
 - Recorded callbacks (isKnownBlockRoot, chainTracker, broadcaster) are replayed from the recorded answers; a
   question the reference never asked is a test failure.
 
+- Phase 4 (Go): `simplemulti.go`, `multiboltlib.go`, `multibolt.go` (the class; `TokenType` constants are
+  `TokenMinSimpleBOLT` etc. so the class keeps the reference's name), `txbuild.go` (ts-sdk `fee(0)` and `sign()`:
+  change split equally, dropped at 0; every input signs a snapshot of the unsigned tx). lock.SimpleMulti 136 and
+  sign.SimpleMulti 141 byte-equal; `vectors/flows.json` (`vectors/gen/flows.test.ts`: the scenarios of b017's
+  test/tokens/MultiBOLT.test.ts with fixed keys instead of BRC-42 derivation: lifecycle, merge-melt,
+  builder-branches, funding-source, second-piece, inflated-balance) reproduced tx for tx, prevTxs and balances
+  included; the inflated-balance scenario fails in both on the covenant.
+
 ## Next
 
-Phase 4 in Go (SimpleMulti template, multiBoltLib, MultiBOLT class), then the Rust port of phases 1-4.
+The Rust port of phases 1-4 (`rust/`, on the patched bsv-sdk), then Phase 5.

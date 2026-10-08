@@ -213,26 +213,30 @@ func (k KeySigner) Sign(_ context.Context, msg []byte) (Signature, error) {
 	return Signature{R: sig.R, S: sig.S}, nil
 }
 
-// Recipient is boltLib's Recipient: a Signer the caller controls, or (PubKeyRecipient) a third party's public key.
-type Recipient interface{ recipientPubKey() []byte }
+// Recipient is boltLib's Recipient: a Signer the caller controls (so a builder can continue as the new owner), or
+// a third party's 33-byte compressed public key ([]byte or PubKeyRecipient).
+type Recipient any
 
-// PubKeyRecipient is a recipient known only by its 33-byte compressed public key.
+// PubKeyRecipient is a recipient known only by its public key.
 type PubKeyRecipient []byte
 
-func (p PubKeyRecipient) recipientPubKey() []byte { return []byte(p) }
-
-// SignerRecipient wraps a Signer the caller controls as a Recipient.
-type SignerRecipient struct{ Signer }
-
-func (s SignerRecipient) recipientPubKey() []byte { return s.Signer.PublicKey() }
-
 // RecipientPubKey is boltLib `recipientPubKey`.
-func RecipientPubKey(r Recipient) []byte { return r.recipientPubKey() }
+func RecipientPubKey(r Recipient) []byte {
+	switch v := r.(type) {
+	case Signer:
+		return v.PublicKey()
+	case PubKeyRecipient:
+		return []byte(v)
+	case []byte:
+		return v
+	}
+	panic(errorf("not a recipient: %T", r))
+}
 
 // RecipientSigner is boltLib `recipientSigner`: the Signer, or nil for a public-key-only recipient.
 func RecipientSigner(r Recipient) Signer {
-	if s, ok := r.(SignerRecipient); ok {
-		return s.Signer
+	if s, ok := r.(Signer); ok {
+		return s
 	}
 	return nil
 }

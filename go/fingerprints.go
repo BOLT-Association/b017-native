@@ -9,9 +9,9 @@ import "encoding/hex"
 type TokenType string
 
 const (
-	MinSimpleBOLT   TokenType = "MinSimpleBOLT"
-	AuthBOLT        TokenType = "AuthBOLT"
-	SimpleMultiBOLT TokenType = "SimpleMultiBOLT"
+	TokenMinSimpleBOLT   TokenType = "MinSimpleBOLT"
+	TokenAuthBOLT        TokenType = "AuthBOLT"
+	TokenSimpleMultiBOLT TokenType = "SimpleMultiBOLT"
 )
 
 // TypeSpec is a REGISTRY entry.
@@ -23,7 +23,7 @@ type TypeSpec struct {
 }
 
 // registryOrder is Object.values(REGISTRY) order (the LAYOUTS key order), which recognizeType walks.
-var registryOrder = []TokenType{MinSimpleBOLT, AuthBOLT, SimpleMultiBOLT}
+var registryOrder = []TokenType{TokenMinSimpleBOLT, TokenAuthBOLT, TokenSimpleMultiBOLT}
 
 // Sha256Hex is `sha256Hex`.
 func Sha256Hex(b []byte) string { return hex.EncodeToString(Sha256(b)) }
@@ -31,11 +31,11 @@ func Sha256Hex(b []byte) string { return hex.EncodeToString(Sha256(b)) }
 // REGISTRY is the reference's REGISTRY, with each suffix hash computed from the embedded suffix.
 var REGISTRY = func() map[TokenType]TypeSpec {
 	layouts := map[TokenType][]int{
-		MinSimpleBOLT:   {20, 20, 1, 36, 36, 33},
-		AuthBOLT:        {20, 20, 1, 36, 36, 33},
-		SimpleMultiBOLT: {16, 16, 20, 20, 20, 36, 1, 1, 36, 36, 33},
+		TokenMinSimpleBOLT:   {20, 20, 1, 36, 36, 33},
+		TokenAuthBOLT:        {20, 20, 1, 36, 36, 33},
+		TokenSimpleMultiBOLT: {16, 16, 20, 20, 20, 36, 1, 1, 36, 36, 33},
 	}
-	suffix := map[TokenType]string{MinSimpleBOLT: MinSimpleLockSuffixHex, AuthBOLT: AuthBoltLockSuffixHex, SimpleMultiBOLT: SimpleMultiLockSuffixHex}
+	suffix := map[TokenType]string{TokenMinSimpleBOLT: MinSimpleLockSuffixHex, TokenAuthBOLT: AuthBoltLockSuffixHex, TokenSimpleMultiBOLT: SimpleMultiLockSuffixHex}
 	out := map[TokenType]TypeSpec{}
 	for _, t := range registryOrder {
 		b, _ := hex.DecodeString(suffix[t])

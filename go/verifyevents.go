@@ -24,9 +24,9 @@ const (
 )
 
 var fields = map[TokenType][5]int{
-	MinSimpleBOLT:   {0, 1, 2, 3, 4},
-	AuthBOLT:        {0, 1, 2, 3, 4},
-	SimpleMultiBOLT: {2, 3, 6, 8, 9},
+	TokenMinSimpleBOLT:   {0, 1, 2, 3, 4},
+	TokenAuthBOLT:        {0, 1, 2, 3, 4},
+	TokenSimpleMultiBOLT: {2, 3, 6, 8, 9},
 }
 
 func field(lock *Script, t TokenType, f fieldName) []byte {

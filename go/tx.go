@@ -25,6 +25,8 @@ type Input struct {
 	UnlockingScript *Script
 	// Sequence is the nSequence; nil is TS `undefined` (serialised and executed as 0xffffffff).
 	Sequence *uint32
+	// Template is the TS `unlockingScriptTemplate`: Sign fills UnlockingScript from it.
+	Template UnlockTemplate
 }
 
 // Output is a TS TransactionOutput.
@@ -32,6 +34,8 @@ type Output struct {
 	// Satoshis is nil when the amount is undefined (TS); serialised as 0.
 	Satoshis      *uint64
 	LockingScript *Script
+	// Change is the TS `change` flag: Fee0 computes its amount.
+	Change bool
 }
 
 // Transaction is a TS Transaction.
