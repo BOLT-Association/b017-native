@@ -83,7 +83,7 @@ cd ../b017-native && node vectors/gen/pack.mjs
   question the reference never asked is a test failure.
 
 - Phase 4 (Go): `simplemulti.go`, `multiboltlib.go`, `multibolt.go` (the class; `TokenType` constants are
-  `TokenMinSimpleBOLT` etc. so the class keeps the reference's name), `txbuild.go` (ts-sdk `fee(0)` and `sign()`:
+  `TypeMinSimple`, `TypeAuth`, `TypeSimpleMulti` (string values unchanged) so the class keeps the reference's name), `txbuild.go` (ts-sdk `fee(0)` and `sign()`:
   change split equally, dropped at 0; every input signs a snapshot of the unsigned tx). lock.SimpleMulti 136 and
   sign.SimpleMulti 141 byte-equal; `vectors/flows.json` (`vectors/gen/flows.test.ts`: the scenarios of b017's
   test/tokens/MultiBOLT.test.ts with fixed keys instead of BRC-42 derivation: lifecycle, merge-melt,
