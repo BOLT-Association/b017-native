@@ -315,7 +315,7 @@ type reader struct {
 	pos int
 }
 
-var errEOF = errors.New("Reader: not enough data")
+var errEOF = errors.New("ReaderUint8Array read exceeds available data")
 
 func (r *reader) eof() bool { return r.pos >= len(r.b) }
 func (r *reader) read(n int) ([]byte, error) {
@@ -392,4 +392,58 @@ func (r *reader) varintStrict() (uint64, error) {
 	default:
 		return uint64(first), nil
 	}
+}
+
+// ToBinaryEF is TS `toEF()` (BRC-30 Extended Format): every input carries its source output's amount and lock.
+func (t *Transaction) ToBinaryEF() ([]byte, error) {
+	w := &writer{}
+	w.u32(t.Version)
+	w.bytes([]byte{0, 0, 0, 0, 0, 0xef})
+	w.varint(uint64(len(t.Inputs)))
+	for _, in := range t.Inputs {
+		if in.SourceTransaction == nil {
+			return nil, errors.New("All inputs must have source transactions when serializing to EF format")
+		}
+		if in.SourceTXID == "" {
+			h, err := in.SourceTransaction.Hash()
+			if err != nil {
+				return nil, err
+			}
+			w.bytes(h)
+		} else {
+			id, err := requireTXID(in.SourceTXID)
+			if err != nil {
+				return nil, err
+			}
+			w.bytes(reverse(id))
+		}
+		w.u32(in.SourceOutputIndex)
+		if in.UnlockingScript == nil {
+			return nil, errors.New("unlockingScript is undefined")
+		}
+		b := in.UnlockingScript.ToBinary()
+		w.varint(uint64(len(b)))
+		w.bytes(b)
+		w.u32(in.Seq())
+		src := in.SourceOutput()
+		if src == nil || src.LockingScript == nil {
+			return nil, errors.New("Cannot read properties of undefined (reading 'satoshis')")
+		}
+		w.u64(src.Sats())
+		ls := src.LockingScript.ToBinary()
+		w.varint(uint64(len(ls)))
+		w.bytes(ls)
+	}
+	w.varint(uint64(len(t.Outputs)))
+	for _, o := range t.Outputs {
+		w.u64(o.Sats())
+		if o.LockingScript == nil {
+			return nil, errors.New("Cannot read properties of undefined (reading 'toUint8Array')")
+		}
+		b := o.LockingScript.ToBinary()
+		w.varint(uint64(len(b)))
+		w.bytes(b)
+	}
+	w.u32(t.LockTime)
+	return w.b, nil
 }

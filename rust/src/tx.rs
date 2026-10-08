@@ -246,7 +246,7 @@ impl<'a> Reader<'a> {
     }
     pub fn read(&mut self, n: usize) -> Result<Vec<u8>> {
         if self.pos + n > self.b.len() {
-            return Err(Error("Reader: not enough data".into()));
+            return Err(Error("ReaderUint8Array read exceeds available data".into()));
         }
         let out = self.b[self.pos..self.pos + n].to_vec();
         self.pos += n;
