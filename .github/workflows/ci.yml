@@ -72,4 +72,6 @@ jobs:
         working-directory: b017-native
         run: |
           node vectors/gen/pack.mjs
-          cd go && go test -count=1 ./...
+          # the committed fuzz corpus builds on the committed nodes.json (the go job replays it); a fresh recording
+          # has other node ids where the reference used random keys
+          cd go && go test -count=1 -skip 'TestVectorsFuzz$' ./...
