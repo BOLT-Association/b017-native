@@ -9,9 +9,14 @@ import (
 
 // TestVectorsFuzz replays the differential corpus (vectors/fuzz.json, vectors/gen/fuzz.test.ts): batches the
 // reference accepted, each with one seeded mutation, and the reference's verdict on it.
-func TestVectorsFuzz(t *testing.T) {
-	path := filepath.Join(vectorsDir(), "fuzz.json")
-	if p := os.Getenv("B017_FUZZ_FILE"); p != "" {
+func TestVectorsFuzz(t *testing.T) { runFuzzFile(t, "fuzz.json") }
+
+// TestVectorsFuzzRegressions replays the cases a port once got wrong.
+func TestVectorsFuzzRegressions(t *testing.T) { runFuzzFile(t, "fuzz-regressions.json") }
+
+func runFuzzFile(t *testing.T, name string) {
+	path := filepath.Join(vectorsDir(), name)
+	if p := os.Getenv("B017_FUZZ_FILE"); p != "" && name == "fuzz.json" {
 		path = p
 	}
 	b, err := os.ReadFile(path)

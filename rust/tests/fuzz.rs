@@ -18,6 +18,16 @@ fn vectors_fuzz() {
     let path = std::env::var("B017_FUZZ_FILE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| vectors_dir().join("fuzz.json"));
+    run_file(path);
+}
+
+/// The cases a port once got wrong.
+#[test]
+fn vectors_fuzz_regressions() {
+    run_file(vectors_dir().join("fuzz-regressions.json"));
+}
+
+fn run_file(path: std::path::PathBuf) {
     let corpus: Value = match std::fs::read_to_string(&path) {
         Ok(s) => serde_json::from_str(&s).unwrap(),
         Err(_) => return,

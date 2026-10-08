@@ -1,8 +1,8 @@
 From 0a5aceee6f18034f365196bf293d1c0ae7c4ecf3 Mon Sep 17 00:00:00 2001
 From: Freddie Honohan <honohanf@gmail.com>
 Date: Thu, 8 Oct 2026 16:28:17 +0100
-Subject: [PATCH] Spend: OP_CHECKSIG subscript taken in the unlocking script
- continues into the locking script
+Subject: [PATCH 1/2] Spend: OP_CHECKSIG subscript taken in the unlocking
+ script continues into the locking script
 
 get_subscript sliced the locking script even while the unlocking script
 ran, and never crossed the boundary. ts-sdk Spend and go-sdk (after

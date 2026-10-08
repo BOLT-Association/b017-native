@@ -1,0 +1,75 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - name: vet and format
+        working-directory: go
+        run: |
+          go vet ./...
+          test -z "$(gofmt -l .)"
+      - name: test (vectors, differential corpus, fuzz seeds)
+        working-directory: go
+        run: go test -count=1 -cover ./...
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: patched bsv-sdk
+        run: sh third_party/setup.sh
+      - name: format and lint
+        run: |
+          cargo fmt -p b017 --check
+          cargo clippy -p b017 --all-targets -- -D warnings
+      - name: test
+        run: cargo test -p b017
+
+  # Re-record the vectors from the TypeScript reference and run both ports on the fresh set. (Some reference tests
+  # use random keys, so a re-recording is not byte-identical to the committed files; the ports must pass it.)
+  vectors:
+    runs-on: ubuntu-latest
+    env:
+      B017_REF: a305f58
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: b017-native
+      - uses: actions/checkout@v4
+        with:
+          repository: BOLT-Association/b017
+          ref: ${{ env.B017_REF }}
+          path: b017
+          token: ${{ secrets.B017_READ_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - name: record
+        working-directory: b017
+        run: |
+          npm ci
+          echo "the generator configs name absolute Windows paths; CI rewrites them to this checkout"
+          sed -i "s|C:/Users/honoh/Code/ChainBrowsers|$GITHUB_WORKSPACE|g" ../b017-native/vectors/gen/*.mjs ../b017-native/vectors/gen/*.ts
+          mkdir -p ../b017-native/vectors/raw
+          B017_VECTORS_OUT=$GITHUB_WORKSPACE/b017-native/vectors/raw/calls.jsonl node node_modules/vitest/vitest.mjs run --config $GITHUB_WORKSPACE/b017-native/vectors/gen/vitest.record.config.mjs
+          node node_modules/vitest/vitest.mjs run --config $GITHUB_WORKSPACE/b017-native/vectors/gen/vitest.static.config.mjs
+      - name: pack and replay
+        working-directory: b017-native
+        run: |
+          node vectors/gen/pack.mjs
+          cd go && go test -count=1 ./...
