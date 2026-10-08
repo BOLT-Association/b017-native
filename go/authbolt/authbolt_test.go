@@ -32,6 +32,21 @@ func authData(tag string, app b017.KeySigner) string {
 	return tag + hex.EncodeToString(app.PublicKey()) + hex.EncodeToString(h[:])
 }
 
+func mustHex(s string) []byte {
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func purposeOr(p string) string {
+	if p == "" {
+		return "signin"
+	}
+	return p
+}
+
 // identity mints an AuthBOLT for `owner` and returns the mint (its funding is header-proven).
 func identity(t *testing.T, owner b017.KeySigner) *b017.Transaction {
 	pkh := b017.Hash160(owner.PublicKey())
@@ -110,6 +125,7 @@ type tcase struct {
 	Broadcast string   `json:"broadcast"`
 	wantOK    bool
 	wantWhy   string
+	wantPurp  string // purpose of an accepted presentation ("" = signin)
 }
 
 func cases(t *testing.T) []tcase {
@@ -119,6 +135,7 @@ func cases(t *testing.T) []tcase {
 	data := authData("02", app)
 	dataBytes, _ := hex.DecodeString(data)
 	good := present(t, mint, owner, pkh, dataBytes)
+	writeData, unknownData := authData("04", app), authData("05", app)
 	return []tcase{
 		{name: "a self-transfer presentation", Package: good, AppPubKey: hex.EncodeToString(app.PublicKey()), Data: data, Broadcast: "already-seen", wantOK: true},
 		{name: "data for another challenge", Package: good, AppPubKey: hex.EncodeToString(app.PublicKey()), Data: authData("01", app), Broadcast: "already-seen",
@@ -133,6 +150,10 @@ func cases(t *testing.T) []tcase {
 		{name: "short auth data", Package: good, AppPubKey: hex.EncodeToString(app.PublicKey()), Data: data[:20], Broadcast: "already-seen",
 			wantWhy: "auth data must be exactly 66 bytes (hex)"},
 		{name: "not BEEF", Package: []string{"00", "01"}, AppPubKey: hex.EncodeToString(app.PublicKey()), Data: data, Broadcast: "already-seen"},
+		{name: "a write presentation", Package: present(t, mint, owner, pkh, mustHex(writeData)), AppPubKey: hex.EncodeToString(app.PublicKey()),
+			Data: writeData, Broadcast: "already-seen", wantOK: true, wantPurp: "write"},
+		{name: "an unknown purpose tag", Package: present(t, mint, owner, pkh, mustHex(unknownData)), AppPubKey: hex.EncodeToString(app.PublicKey()),
+			Data: unknownData, Broadcast: "already-seen"},
 	}
 }
 
@@ -151,7 +172,7 @@ func TestVerify(t *testing.T) {
 				t.Fatalf("reason %q, want %q", r.Reason, c.wantWhy)
 			}
 			if c.wantOK {
-				if r.Issuer != hex.EncodeToString(key(7).PublicKey()) || r.Purpose != "signin" || r.Holder != hex.EncodeToString(b017.Hash160(key(7).PublicKey())) {
+				if r.Issuer != hex.EncodeToString(key(7).PublicKey()) || r.Purpose != purposeOr(c.wantPurp) || r.Holder != hex.EncodeToString(b017.Hash160(key(7).PublicKey())) {
 					t.Fatalf("result %+v", r)
 				}
 			}

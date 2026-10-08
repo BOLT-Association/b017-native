@@ -33,7 +33,7 @@ type Result struct {
 // AuthDataBytes is AUTH_DATA_BYTES: [tag 1][app public key 33][SHA-256 of the challenge statement 32].
 const AuthDataBytes = 66
 
-var purposeOf = map[int]string{1: "register", 2: "signin", 3: "refresh"}
+var purposeOf = map[int]string{1: "register", 2: "signin", 3: "refresh", 4: "write"}
 
 func isHex(s string, chars int) bool {
 	if len(s) != chars {
