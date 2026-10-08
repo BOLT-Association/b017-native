@@ -69,7 +69,9 @@ pub fn validate(p: &SpendParams) -> Result<()> {
     });
     match spend.validate() {
         Ok(true) => Ok(()),
-        Ok(false) => err("the script evaluated false"),
+        // ts-sdk's validate() never returns false: a falsy top stack item throws this. (b017's own "the script
+        // evaluated false" is therefore unreachable in the reference, and must stay so here.)
+        Ok(false) => err("Script evaluation error: The top stack element must be truthy after script evaluation."),
         Err(e) => Err(Error(e.to_string())),
     }
 }

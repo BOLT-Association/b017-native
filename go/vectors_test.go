@@ -69,6 +69,7 @@ func loadCalls(t testing.TB, name string) []map[string]json.RawMessage {
 type graph struct {
 	t     testing.TB
 	nodes map[string]vNode
+	extra map[string]vNode
 	memo  map[string]*Transaction
 }
 
@@ -81,6 +82,9 @@ func (g *graph) tx(id string) *Transaction {
 		return t
 	}
 	n, ok := g.nodes[id]
+	if !ok {
+		n, ok = g.extra[id]
+	}
 	if !ok {
 		g.t.Fatalf("unknown node %s", id)
 	}

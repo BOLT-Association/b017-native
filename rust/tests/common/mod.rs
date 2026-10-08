@@ -37,6 +37,7 @@ pub fn label(rec: &Value, i: usize) -> String {
 #[derive(Default)]
 pub struct Graph {
     memo: HashMap<String, TxRef>,
+    pub extra: Option<std::rc::Rc<serde_json::Map<String, Value>>>,
 }
 
 impl Graph {
@@ -44,7 +45,8 @@ impl Graph {
         if let Some(t) = self.memo.get(id) {
             return t.clone();
         }
-        let n = nodes().get(id).unwrap_or_else(|| panic!("unknown node {id}"));
+        let extra = self.extra.clone();
+        let n = nodes().get(id).or_else(|| extra.as_ref().and_then(|e| e.get(id))).unwrap_or_else(|| panic!("unknown node {id}")).clone();
         let t = tx_ref(Transaction::default());
         self.memo.insert(id.to_string(), t.clone());
         let mut tx = Transaction {
