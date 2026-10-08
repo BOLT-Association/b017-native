@@ -19,19 +19,12 @@ through packages/bolt `verifyIdentity` (the sidecar's code) and requires the sam
 
 ## The change in p2p (not applied: another session works in p2p/)
 
-1. `p2p/go.mod`: depend on the module. Until BOLT-Association/b017-native is pushed, a replace to the local clone:
+1. `p2p/go.mod`: depend on the module (`go get github.com/BOLT-Association/b017-native/go@main`).
 
-```
-require github.com/BOLT-Association/b017-native/go v0.0.0
-replace github.com/BOLT-Association/b017-native/go => ../b017-native/go
-replace github.com/bsv-blockchain/go-sdk => ../b017-native/third_party/go-sdk
-```
-
-   This is p2pd's first dependency (it pulls in go-sdk). `go mod tidy` writes the `go.sum`. The second replace
-   is needed because Go does not pass replace directives on to dependents: without it p2pd would build b017 on
-   unpatched go-sdk v1.7.1, which reads shift and multisig counts wider than 64 bits wrongly
-   (`third_party/go-sdk-patches/0001`). Run `sh b017-native/third_party/setup.sh` first. Drop the line once the
-   fix is in a go-sdk release and b017-native requires that release.
+   This is p2pd's first dependency (it pulls in go-sdk). `go mod tidy` writes the `go.sum`. b017-native requires
+   go-sdk at master commit 511b58c (a pseudo-version): v1.7.1 reads script numbers wider than 64 bits by their
+   low 64 bits (OP_SPLIT could panic), fixed upstream after v1.7.1 (GHSA-rh54-8fpg-8wwf) but not yet released.
+   Minimal version selection gives p2pd that version too; do not pin go-sdk v1.7.1 in p2p.
 
 2. `p2p/internal/authbolt/inprocess.go` (new):
 
