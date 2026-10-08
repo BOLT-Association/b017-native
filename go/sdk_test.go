@@ -5,6 +5,7 @@ package b017
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -294,6 +295,80 @@ func TestSDKBeef(t *testing.T) {
 					t.Errorf("#%d: atomic BEEF does not round-trip (%v)", i, err)
 				}
 			}
+		}
+	}
+}
+
+func TestSDKAtomicsAndFees(t *testing.T) {
+	sdk := loadSDK(t)
+	var nodes map[string]vNode
+	_ = json.Unmarshal(sdk["nodes"], &nodes)
+	var atomics []struct {
+		Tx     string `json:"tx"`
+		Atomic tried  `json:"atomic"`
+		Extra  tried  `json:"extra"`
+	}
+	_ = json.Unmarshal(sdk["atomics"], &atomics)
+	for i, a := range atomics {
+		g := newGraph(t)
+		g.extra = nodes
+		tx := g.tx(a.Tx)
+		out, err := ToAtomicBeef(tx)
+		expect(t, fmt.Sprintf("#%d atomic", i), &a.Atomic, hex.EncodeToString(out), err)
+		if a.Extra.threw() {
+			continue
+		}
+		var w struct {
+			Hex              string   `json:"hex"`
+			Valid            bool     `json:"valid"`
+			ValidTxidOnly    bool     `json:"validTxidOnly"`
+			Order            []string `json:"order"`
+			AtomicForSubject bool     `json:"atomicForSubject"`
+		}
+		_ = json.Unmarshal(a.Extra.OK, &w)
+		b, _ := hex.DecodeString(w.Hex)
+		beef, err := BeefFromBinary(b)
+		if err != nil {
+			t.Fatalf("#%d extra: %v", i, err)
+		}
+		v, _ := beef.IsValid(false)
+		vt, _ := beef.IsValid(true)
+		id, _ := tx.ID()
+		var order []string
+		for _, bt := range beef.Txs {
+			order = append(order, bt.Txid())
+		}
+		if v != w.Valid || vt != w.ValidTxidOnly || beef.IsAtomic(id) != w.AtomicForSubject || fmt.Sprint(order) != fmt.Sprint(w.Order) {
+			t.Errorf("#%d extra: %v/%v/%v %v; reference %v/%v/%v %v", i, v, vt, beef.IsAtomic(id), order, w.Valid, w.ValidTxidOnly, w.AtomicForSubject, w.Order)
+		}
+	}
+	var fees []struct {
+		Before struct {
+			In      uint64 `json:"in"`
+			Fixed   uint64 `json:"fixed"`
+			Changes int    `json:"changes"`
+		} `json:"before"`
+		Res struct {
+			OK []uint64 `json:"ok"`
+		} `json:"res"`
+	}
+	_ = json.Unmarshal(sdk["fees"], &fees)
+	for i, f := range fees {
+		src := &Transaction{Version: 1, Outputs: []*Output{{Satoshis: U64(f.Before.In), LockingScript: P2PKHLock(make([]byte, 20))}}}
+		tx := &Transaction{Version: 2, Inputs: []*Input{{SourceTransaction: src, UnlockingScript: NewScript(nil)}},
+			Outputs: []*Output{{Satoshis: U64(f.Before.Fixed), LockingScript: P2PKHLock(make([]byte, 20))}}}
+		for c := 0; c < f.Before.Changes; c++ {
+			tx.Outputs = append(tx.Outputs, &Output{Change: true, LockingScript: P2PKHLock(make([]byte, 20))})
+		}
+		if err := Fee0(tx); err != nil {
+			t.Fatalf("#%d: %v", i, err)
+		}
+		var got []uint64
+		for _, o := range tx.Outputs {
+			got = append(got, o.Sats())
+		}
+		if fmt.Sprint(got) != fmt.Sprint(f.Res.OK) {
+			t.Errorf("#%d fee(0): %v, reference %v", i, got, f.Res.OK)
 		}
 	}
 }

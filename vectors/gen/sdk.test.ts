@@ -4,6 +4,7 @@
 // instance); these vectors cover the rest. Written to vectors/sdk.json.
 import { writeFileSync } from 'node:fs'
 import { test } from 'vitest'
+import { Graph } from './ser-plain.ts'
 import { Beef, Hash, LockingScript, MerklePath, P2PKH, PrivateKey, Script, Transaction, TransactionSignature, UnlockingScript, Utils } from '@bsv/sdk'
 
 const OUT = 'C:/Users/honoh/Code/ChainBrowsers/b017-native/vectors/sdk.json'
@@ -59,7 +60,7 @@ function bump(levels: string[][], idxs: number[], height: number): MerklePath {
   return new MerklePath(height, path, false)
 }
 
-test('write sdk vectors', () => {
+test('write sdk vectors', async () => {
   const merkle: any[] = []
   for (let k = 0; k < 60; k++) {
     const n = 1 + rint(40)
@@ -159,5 +160,58 @@ test('write sdk vectors', () => {
     beefs.push({ v2, atomic, v1, v2parsed: 'ok' in v2 ? parsed(v2.ok) : null, atomicParsed: 'ok' in atomic ? parsed(atomic.ok) : null, v1parsed: 'ok' in v1 ? parsed(v1.ok) : null, subject: subject.id('hex') })
   }
 
-  writeFileSync(OUT, JSON.stringify({ merkle, scripts, scriptHexErrors, txs, srcHex: src.toHex(), beefs }))
+  // ---- BEEF graphs over real multi-leaf trees: proven txs sharing a block (bumps combine), txid-only entries,
+  // a BEEF that is not atomic for its subject, change split across several change outputs ----
+  const g = new Graph()
+  const atomics: any[] = []
+  for (let k = 0; k < 25; k++) {
+    const roots: Transaction[] = []
+    for (let i = 0; i < 2 + rint(5); i++) {
+      const t = new Transaction(1, [], [{ satoshis: 1000 + i, lockingScript: new P2PKH().lock(pkh) }, { satoshis: 50, lockingScript: new P2PKH().lock(pkh) }])
+      t.addInput({ sourceTXID: hex(rbytes(32)), sourceOutputIndex: 0, unlockingScript: UnlockingScript.fromBinary(rbytes(4)), sequence: 0xffffffff })
+      roots.push(t)
+    }
+    // the roots' txids, padded with random siblings, form one block; each root carries its own path
+    const ids = roots.map((t) => t.id('hex'))
+    const n = ids.length + rint(6)
+    const levels = tree(n)
+    const slots = Array.from({ length: n }, (_, i) => i).sort(() => r() - 0.5).slice(0, ids.length)
+    slots.forEach((slot, i) => { levels[0][slot] = ids[i] })
+    for (let h = 1; h < levels.length; h++) for (let i = 0; i < levels[h].length; i++) levels[h][i] = hashPair(levels[h - 1][2 * i + 1] ?? levels[h - 1][2 * i], levels[h - 1][2 * i])
+    const height = 500 + rint(50)
+    roots.forEach((t, i) => { t.merklePath = bump(levels, [slots[i]], height) })
+    // a child spending several of them, and a grandchild
+    const child = new Transaction(2, [], [{ satoshis: 10, lockingScript: new P2PKH().lock(pkh) }])
+    for (const p of roots.slice(0, 2 + rint(Math.max(1, roots.length - 1)))) child.addInput({ sourceTransaction: p, sourceOutputIndex: rint(2), unlockingScript: UnlockingScript.fromBinary(rbytes(3)), sequence: 0xffffffff })
+    const grand = new Transaction(2, [], [{ satoshis: 1, lockingScript: new P2PKH().lock(pkh) }])
+    grand.addInput({ sourceTransaction: child, sourceOutputIndex: 0, unlockingScript: UnlockingScript.fromBinary([]), sequence: 0xffffffff })
+    const subject = rint(2) ? grand : child
+    const id = g.tx(subject)
+    const atomic = tryRun(() => { const b = new Beef(); b.mergeTransaction(subject); return hex(b.toBinaryAtomic(subject.id('hex'))) })
+    // the same BEEF with a txid-only entry and an unrelated tx (V2 only)
+    const extra = tryRun(() => {
+      const b = new Beef(); b.mergeTransaction(subject); b.mergeTxidOnly(hex(rbytes(32)))
+      const stray = new Transaction(1, [], [{ satoshis: 1, lockingScript: new P2PKH().lock(pkh) }]); stray.addInput({ sourceTXID: hex(rbytes(32)), sourceOutputIndex: 0, unlockingScript: UnlockingScript.fromBinary([]), sequence: 0xffffffff })
+      b.mergeTransaction(stray)
+      const bytes = b.toBinary()
+      const p = Beef.fromBinary(bytes)
+      return { hex: hex(bytes), valid: p.isValid(false), validTxidOnly: p.isValid(true), order: p.txs.map((t) => t.txid), atomicForSubject: p.isAtomic(subject.id('hex')) }
+    })
+    atomics.push({ tx: id, atomic, extra })
+  }
+  // fee(0) over several change outputs
+  const fees: any[] = []
+  for (let k = 0; k < 8; k++) {
+    const t = new Transaction(2, [], [])
+    const s1 = new Transaction(1, [], [{ satoshis: 100 + rint(1000), lockingScript: new P2PKH().lock(pkh) }])
+    t.addInput({ sourceTransaction: s1, sourceOutputIndex: 0, unlockingScript: UnlockingScript.fromBinary([]), sequence: 0xffffffff })
+    t.addOutput({ satoshis: rint(100), lockingScript: new P2PKH().lock(pkh) })
+    const nc = 1 + rint(4)
+    for (let c = 0; c < nc; c++) t.addOutput({ change: true, lockingScript: new P2PKH().lock(pkh) })
+    const before = { in: s1.outputs[0].satoshis, fixed: t.outputs[0].satoshis, changes: nc }
+    const res = await (async () => { try { await t.fee(0); return { ok: t.outputs.map((o) => o.satoshis ?? null) } } catch (e: any) { return { throws: String(e?.message ?? e) } } })()
+    fees.push({ before, res })
+  }
+
+  writeFileSync(OUT, JSON.stringify({ merkle, scripts, scriptHexErrors, txs, srcHex: src.toHex(), beefs, atomics, fees, nodes: g.nodes }))
 })

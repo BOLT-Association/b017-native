@@ -184,3 +184,49 @@ fn sdk_beef() {
     }
     assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
 }
+
+#[test]
+fn sdk_atomics_and_fees() {
+    let s = sdk();
+    let extra = std::rc::Rc::new(s["nodes"].as_object().unwrap().clone());
+    let mut fails = vec![];
+    for (i, a) in s["atomics"].as_array().unwrap().iter().enumerate() {
+        let mut g = Graph::default();
+        g.extra = Some(extra.clone());
+        let tx = g.tx(a["tx"].as_str().unwrap());
+        expect(&mut fails, &format!("#{i} atomic"), &a["atomic"], to_atomic_beef(&tx).map(|b| hex_encode(&b)));
+        let w = &a["extra"]["ok"];
+        if w.is_null() {
+            continue;
+        }
+        let mut beef = Beef::from_binary(&hex_decode(w["hex"].as_str().unwrap()).unwrap()).unwrap();
+        let v = beef.is_valid(false).unwrap();
+        let vt = beef.is_valid(true).unwrap();
+        let id = tx.borrow().id().unwrap();
+        let order: Vec<Value> = beef.entries().unwrap().into_iter().map(|(t, _, _)| Value::String(t)).collect();
+        if v != w["valid"] || vt != w["validTxidOnly"] || beef.is_atomic(&id).unwrap() != w["atomicForSubject"] || Value::Array(order) != w["order"] {
+            fails.push(format!("#{i} extra: differs"));
+        }
+    }
+    for (i, f) in s["fees"].as_array().unwrap().iter().enumerate() {
+        use b017::multibolt::p2pkh_lock;
+        use b017::tx::{Input, Output};
+        let b = &f["before"];
+        let src = tx_ref(Transaction { version: 1, outputs: vec![Output::new(b["in"].as_u64().unwrap(), p2pkh_lock(&[0; 20]))], ..Default::default() });
+        let mut tx = Transaction {
+            version: 2,
+            inputs: vec![Input { source_transaction: Some(src), unlocking_script: Some(Script::default()), ..Default::default() }],
+            outputs: vec![Output::new(b["fixed"].as_u64().unwrap(), p2pkh_lock(&[0; 20]))],
+            ..Default::default()
+        };
+        for _ in 0..b["changes"].as_u64().unwrap() {
+            tx.outputs.push(Output { satoshis: None, locking_script: Some(p2pkh_lock(&[0; 20])), change: true });
+        }
+        b017::txbuild::fee0(&mut tx).unwrap();
+        let got: Vec<Value> = tx.outputs.iter().map(|o| Value::from(o.sats())).collect();
+        if Value::Array(got) != f["res"]["ok"] {
+            fails.push(format!("#{i} fee(0) differs"));
+        }
+    }
+    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+}
