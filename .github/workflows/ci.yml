@@ -62,6 +62,7 @@ jobs:
         working-directory: b017
         run: |
           npm ci
+          npm run build   # b017's releasable test packs dist/
           echo "the generator configs name absolute Windows paths; CI rewrites them to this checkout"
           sed -i "s|C:/Users/honoh/Code/ChainBrowsers|$GITHUB_WORKSPACE|g" ../b017-native/vectors/gen/*.mjs ../b017-native/vectors/gen/*.ts
           mkdir -p ../b017-native/vectors/raw
