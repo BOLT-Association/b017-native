@@ -1,8 +1,8 @@
 From 26e7853ec7f71d7b433f536dc9aab7d18d14c299 Mon Sep 17 00:00:00 2001
 From: Freddie Honohan <honohanf@gmail.com>
 Date: Thu, 8 Oct 2026 22:36:21 +0100
-Subject: [PATCH] interpreter: judge shift and multisig counts by their full
- value
+Subject: [PATCH 1/2] interpreter: judge shift and multisig counts by their
+ full value
 
 ScriptNumber.Int keeps only the low 64 bits. After Chronicle a script number can be much wider, so
 OP_LSHIFT / OP_RSHIFT read a count of 2^63 as negative (an error) and 2^64+1 as a shift by 1, and

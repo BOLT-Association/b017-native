@@ -40,9 +40,18 @@ func runInterpFile(t *testing.T, path string) {
 	diff := map[string]int{}
 	var first []string
 	for i, c := range cases {
-		err := Validate(SpendParams{SourceTXID: "abababababababababababababababababababababababababababababababab", SourceSatoshis: 1000,
-			LockingScript: MustScriptFromHex(c.L), UnlockingScript: MustScriptFromHex(c.U), TransactionVersion: c.V,
-			OtherInputs: []OutpointRef{}, InputSequence: 0xffffffff})
+		var panicked any
+		err := func() error {
+			defer func() { panicked = recover() }()
+			return Validate(SpendParams{SourceTXID: "abababababababababababababababababababababababababababababababab", SourceSatoshis: 1000,
+				LockingScript: MustScriptFromHex(c.L), UnlockingScript: MustScriptFromHex(c.U), TransactionVersion: c.V,
+				OtherInputs: []OutpointRef{}, InputSequence: 0xffffffff})
+		}()
+		if panicked != nil {
+			diff["port panicked"]++
+			first = append(first, "#"+itoa(i)+" v"+itoa(int(c.V))+" u="+c.U+" l="+c.L+" | port panicked")
+			continue
+		}
 		if (err == nil) != c.OK {
 			key := c.Err
 			if c.OK {

@@ -1,12 +1,21 @@
 // The interpreter cases a port once got wrong, with the reference's verdict (written to vectors/interp-regressions.json).
-// Run from the b017 checkout: node ../b017-native/vectors/gen/interp-regressions.mjs <interp corpus that found case 21955 (seed 7, 30000 cases)> ../b017-native/vectors/interp-regressions.json
-import { readFileSync, writeFileSync } from 'node:fs'
+// Run from the b017 checkout: node ../b017-native/vectors/gen/interp-regressions.mjs ../b017-native/vectors/interp-regressions.json
+import { writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 const require = createRequire('C:/Users/honoh/Code/ChainBrowsers/b017/package.json')
 const { LockingScript, Spend, UnlockingScript } = require('@bsv/sdk')
-const [seed7, out] = process.argv.slice(2)
+const [out] = process.argv.slice(2)
 const pairs = [
-  JSON.parse(readFileSync(seed7, 'utf8'))[21955],
+  // interpreter seed 7 (30000 cases) #21955: OP_LSHIFT by a 20-byte hash (go-sdk read its low 64 bits as negative)
+  { u: '04aa3931c1', l: '5f8d029de5a79802b26c', v: 2 },
+  // seed 103 (20000 cases) #10309: OP_SPLIT at a 32-byte hash (go-sdk's Int32 clamp came after a 64-bit wrap: panic)
+  { u: '5205f549c7f950', l: '03eab690a87f95e0', v: 2 },
+  // OP_SPLIT at 2^63 and at 2^64+1 (low 64 bits: negative, and 1)
+  { u: '', l: '03616263' + '09000000000000008000' + '7f' + '7551', v: 2 },
+  { u: '', l: '03616263' + '09010000000000000001' + '7f' + '7551', v: 2 },
+  // OP_PICK and OP_ROLL at 2^64 (low 64 bits: 0)
+  { u: '', l: '51' + '09000000000000000001' + '79', v: 2 },
+  { u: '', l: '51' + '09000000000000000001' + '7a', v: 2 },
   { u: '', l: '0107' + '09010000000000000001' + '98' + '0100' + '87', v: 2 },
   { u: '', l: '0107' + '09000000000000008000' + '99' + '0100' + '87', v: 2 },
   { u: '', l: '00' + '00' + '09000000000000000001' + 'ae', v: 2 },
