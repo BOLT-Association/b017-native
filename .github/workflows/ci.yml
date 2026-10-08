@@ -52,7 +52,6 @@ jobs:
           repository: BOLT-Association/b017
           ref: ${{ env.B017_REF }}
           path: b017
-          token: ${{ secrets.B017_READ_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
