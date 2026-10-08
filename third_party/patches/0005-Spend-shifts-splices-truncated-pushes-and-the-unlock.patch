@@ -1,7 +1,7 @@
 From 67b9ba5e5cf8d7350bb47057f0e13dcf5ef1b063 Mon Sep 17 00:00:00 2001
 From: Freddie Honohan <honohanf@gmail.com>
 Date: Thu, 8 Oct 2026 21:57:45 +0100
-Subject: [PATCH 5/6] Spend: shifts, splices, truncated pushes and the
+Subject: [PATCH 5/7] Spend: shifts, splices, truncated pushes and the
  unlock/lock boundary as ts-sdk Spend has them
 
 - OP_LSHIFTNUM / OP_RSHIFTNUM: a negative or > INT_MAX bit count is an error (it was read as 0); a left shift

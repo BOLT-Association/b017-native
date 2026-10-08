@@ -14,6 +14,16 @@ fn vectors_interpreter() {
     let path = std::env::var("B017_INTERP_FILE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| vectors_dir().join("interp.json"));
+    run_file(path);
+}
+
+/// The interpreter cases a port (or its SDK) once got wrong.
+#[test]
+fn vectors_interpreter_regressions() {
+    run_file(vectors_dir().join("interp-regressions.json"));
+}
+
+fn run_file(path: std::path::PathBuf) {
     let cases: Vec<Value> = match std::fs::read_to_string(&path) {
         Ok(s) => serde_json::from_str(&s).unwrap(),
         Err(_) => return,

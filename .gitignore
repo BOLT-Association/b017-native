@@ -5,3 +5,4 @@ third_party/bsv-rust-sdk/
 rust/target/
 target/
 .claude/
+third_party/go-sdk/

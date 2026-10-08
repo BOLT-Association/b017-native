@@ -1,7 +1,7 @@
 From 7a11cf95a2a110bf80d9943e27048b847999f141 Mon Sep 17 00:00:00 2001
 From: Freddie Honohan <honohanf@gmail.com>
 Date: Thu, 8 Oct 2026 22:16:46 +0100
-Subject: [PATCH 6/6] Spend: operand ranges, OP_VER, strict signature / key
+Subject: [PATCH 6/7] Spend: operand ranges, OP_VER, strict signature / key
  encoding and minimal pushes as ts-sdk Spend has them
 
 - OP_PICK / OP_ROLL / OP_SPLIT / OP_NUM2BIN: an operand too large for an i64 was read as 0; it now fails the

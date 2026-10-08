@@ -1,7 +1,7 @@
 From f2a2e27c63dd65707c9b693c3478078ce61a6174 Mon Sep 17 00:00:00 2001
 From: Freddie Honohan <honohanf@gmail.com>
 Date: Thu, 8 Oct 2026 19:52:08 +0100
-Subject: [PATCH 4/6] Spend: test that an undefined opcode fails when executed
+Subject: [PATCH 4/7] Spend: test that an undefined opcode fails when executed
  and is skipped when not
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

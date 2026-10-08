@@ -1,0 +1,29 @@
+// The interpreter cases a port once got wrong, with the reference's verdict (written to vectors/interp-regressions.json).
+// Run from the b017 checkout: node ../b017-native/vectors/gen/interp-regressions.mjs <interp corpus that found case 21955 (seed 7, 30000 cases)> ../b017-native/vectors/interp-regressions.json
+import { readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+const require = createRequire('C:/Users/honoh/Code/ChainBrowsers/b017/package.json')
+const { LockingScript, Spend, UnlockingScript } = require('@bsv/sdk')
+const [seed7, out] = process.argv.slice(2)
+const pairs = [
+  JSON.parse(readFileSync(seed7, 'utf8'))[21955],
+  { u: '', l: '0107' + '09010000000000000001' + '98' + '0100' + '87', v: 2 },
+  { u: '', l: '0107' + '09000000000000008000' + '99' + '0100' + '87', v: 2 },
+  { u: '', l: '00' + '00' + '09000000000000000001' + 'ae', v: 2 },
+  { u: '', l: '0107' + '09010000000000000001' + '98' + '0100' + '87', v: 1 },
+  // 21 keys, 0 signatures: valid without flags (key limit INT_MAX, not 20)
+  { u: '', l: '00' + '00' + '00'.repeat(21) + '0115' + 'ae', v: 2 },
+  // 2^64 signatures against 1 key
+  { u: '', l: '00' + '09000000000000000001' + '00' + '51' + 'ae', v: 2 },
+]
+const cases = pairs.map(({ u, l, v }) => {
+  let ok = false, err = ''
+  try {
+    ok = new Spend({ sourceTXID: 'ab'.repeat(32), sourceOutputIndex: 0, sourceSatoshis: 1000,
+      lockingScript: LockingScript.fromHex(l), unlockingScript: UnlockingScript.fromHex(u),
+      transactionVersion: v, otherInputs: [], inputIndex: 0, inputSequence: 0xffffffff, outputs: [], lockTime: 0 }).validate()
+  } catch (e) { err = String(e?.message ?? e).split('\n')[0] }
+  return { u, l, v, ok, err }
+})
+writeFileSync(out, JSON.stringify(cases))
+console.log(cases)

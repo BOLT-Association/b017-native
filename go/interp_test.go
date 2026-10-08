@@ -15,9 +15,18 @@ func TestVectorsInterpreter(t *testing.T) {
 	if p := os.Getenv("B017_INTERP_FILE"); p != "" {
 		path = p
 	}
+	runInterpFile(t, path)
+}
+
+// TestVectorsInterpreterRegressions: the interpreter cases a port (or its SDK) once got wrong.
+func TestVectorsInterpreterRegressions(t *testing.T) {
+	runInterpFile(t, filepath.Join(vectorsDir(), "interp-regressions.json"))
+}
+
+func runInterpFile(t *testing.T, path string) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		t.Skip("no interp.json")
+		t.Skip("no " + path)
 	}
 	var cases []struct {
 		U, L string
