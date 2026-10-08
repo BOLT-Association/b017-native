@@ -372,3 +372,69 @@ func TestSDKAtomicsAndFees(t *testing.T) {
 		}
 	}
 }
+
+func TestSDKCorruptionAndPathRules(t *testing.T) {
+	sdk := loadSDK(t)
+	var corrupt []struct {
+		Kind   string `json:"kind"`
+		Hex    string `json:"hex"`
+		Result tried  `json:"result"`
+	}
+	_ = json.Unmarshal(sdk["corrupt"], &corrupt)
+	exact := 0
+	for i, c := range corrupt {
+		var id string
+		var err error
+		if c.Kind == "beef" {
+			var tx *Transaction
+			tx, err = FromBeef(c.Hex)
+			if err == nil {
+				id, err = tx.ID()
+			}
+		} else {
+			var tx *Transaction
+			tx, err = TransactionFromHex(c.Hex)
+			if err == nil {
+				id, err = tx.ID()
+			}
+		}
+		expect(t, fmt.Sprintf("#%d %s", i, c.Kind), &c.Result, id, err)
+		if c.Result.threw() && err != nil && err.Error() == *c.Result.Throws {
+			exact++
+		}
+	}
+	t.Logf("corruption: %d cases, %d errors word for word", len(corrupt), exact)
+	var shapes []struct {
+		Path [][]struct {
+			Offset    uint64  `json:"offset"`
+			Hash      *string `json:"hash"`
+			Txid      bool    `json:"txid"`
+			Duplicate bool    `json:"duplicate"`
+		} `json:"path"`
+		Legal  bool  `json:"legal"`
+		Result tried `json:"result"`
+	}
+	_ = json.Unmarshal(sdk["shapes"], &shapes)
+	for i, s := range shapes {
+		var path [][]*Leaf
+		for _, level := range s.Path {
+			l := []*Leaf{}
+			for _, x := range level {
+				lf := &Leaf{Offset: x.Offset, Txid: x.Txid, Duplicate: x.Duplicate}
+				if x.Hash != nil {
+					lf.Hash, lf.HasHash = *x.Hash, true
+				}
+				l = append(l, lf)
+			}
+			path = append(path, l)
+		}
+		mp, err := NewMerklePath(7, path, s.Legal)
+		h := ""
+		if err == nil {
+			h = mp.ToHex()
+		} else if s.Result.threw() && err.Error() != *s.Result.Throws {
+			t.Errorf("#%d: %q, reference %q", i, err, *s.Result.Throws)
+		}
+		expect(t, fmt.Sprintf("path #%d", i), &s.Result, h, err)
+	}
+}

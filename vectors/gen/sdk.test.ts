@@ -5,6 +5,7 @@
 import { writeFileSync } from 'node:fs'
 import { test } from 'vitest'
 import { Graph } from './ser-plain.ts'
+import { fromBeef } from 'C:/Users/honoh/Code/ChainBrowsers/b017/src/lib/scanner/beef.ts'
 import { Beef, Hash, LockingScript, MerklePath, P2PKH, PrivateKey, Script, Transaction, TransactionSignature, UnlockingScript, Utils } from '@bsv/sdk'
 
 const OUT = 'C:/Users/honoh/Code/ChainBrowsers/b017-native/vectors/sdk.json'
@@ -213,5 +214,42 @@ test('write sdk vectors', async () => {
     fees.push({ before, res })
   }
 
-  writeFileSync(OUT, JSON.stringify({ merkle, scripts, scriptHexErrors, txs, srcHex: src.toHex(), beefs, atomics, fees, nodes: g.nodes }))
+  // ---- corruption: truncated and byte-flipped BEEF (through b017's fromBeef) and raw txs ----
+  const corrupt: any[] = []
+  for (const a of atomics.slice(0, 6)) {
+    if (!('ok' in a.atomic)) continue
+    const bytes = Utils.toArray(a.atomic.ok, 'hex')
+    const cuts = new Set<number>(Array.from({ length: 30 }, () => rint(bytes.length)))
+    for (const c of cuts) {
+      const h = hex(bytes.slice(0, c))
+      corrupt.push({ kind: 'beef', hex: h, result: tryRun(() => fromBeef(h).id('hex')) })
+    }
+    for (let k = 0; k < 30; k++) {
+      const b2 = bytes.slice()
+      b2[rint(b2.length)] ^= 1 + rint(255)
+      const h = hex(b2)
+      corrupt.push({ kind: 'beef', hex: h, result: tryRun(() => fromBeef(h).id('hex')) })
+    }
+  }
+  for (const t of txs.slice(0, 4)) {
+    const bytes = Utils.toArray(t.hex, 'hex')
+    for (let c = 0; c < bytes.length; c += 1 + rint(9)) {
+      const h = hex(bytes.slice(0, c))
+      corrupt.push({ kind: 'tx', hex: h, result: tryRun(() => Transaction.fromHex(h).id('hex')) })
+    }
+  }
+  // ---- MerklePath constructor rules ----
+  const shapes: any[] = []
+  const leaf = (offset: number, extra: any = {}) => ({ offset, hash: hex(rbytes(32)), ...extra })
+  const cands: [any[], boolean][] = [
+    [[], true], [[[]], true], [Array.from({ length: 55 }, () => [leaf(0)]), true],
+    [[[leaf(0), leaf(0)]], true], [[[leaf(0, { txid: true }), leaf(1)], [leaf(5)]], true], [[[leaf(0, { txid: true }), leaf(1)], [leaf(5)]], false],
+    [[[leaf(0, { txid: true }), leaf(1)], [leaf(1)]], true], [[[leaf(2, { txid: true }), { offset: 3, duplicate: true }], [leaf(0)]], true],
+    [[[leaf(0, { txid: true }), leaf(1, { txid: true })]], true],
+  ]
+  for (const [path, legal] of cands) {
+    shapes.push({ path, legal, result: tryRun(() => new MerklePath(7, path, legal).toHex()) })
+  }
+
+  writeFileSync(OUT, JSON.stringify({ merkle, scripts, scriptHexErrors, txs, srcHex: src.toHex(), beefs, atomics, fees, corrupt, shapes, nodes: g.nodes }))
 })

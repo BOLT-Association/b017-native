@@ -230,3 +230,54 @@ fn sdk_atomics_and_fees() {
     }
     assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
 }
+
+#[test]
+fn sdk_corruption_and_path_rules() {
+    use b017::merklepath::Leaf;
+    let s = sdk();
+    let mut fails = vec![];
+    let mut exact = 0;
+    for (i, c) in s["corrupt"].as_array().unwrap().iter().enumerate() {
+        let h = c["hex"].as_str().unwrap();
+        let got = if c["kind"] == "beef" {
+            from_beef(&Bin::Hex(h)).and_then(|t| t.borrow().id())
+        } else {
+            Transaction::from_hex(h).and_then(|t| t.id())
+        };
+        if let (Some(w), Err(e)) = (c["result"]["throws"].as_str(), &got) {
+            if e.0 == w {
+                exact += 1;
+            }
+        }
+        expect(&mut fails, &format!("#{i} {}", c["kind"]), &c["result"], got);
+    }
+    eprintln!("corruption: {} cases, {exact} errors word for word", s["corrupt"].as_array().unwrap().len());
+    for (i, sh) in s["shapes"].as_array().unwrap().iter().enumerate() {
+        let path: Vec<Vec<Leaf>> = sh["path"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|level| {
+                level
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|x| Leaf {
+                        offset: x["offset"].as_u64().unwrap(),
+                        hash: x["hash"].as_str().map(|s| s.to_string()),
+                        txid: x["txid"].as_bool().unwrap_or(false),
+                        duplicate: x["duplicate"].as_bool().unwrap_or(false),
+                    })
+                    .collect()
+            })
+            .collect();
+        let got = MerklePath::new(7, path, sh["legal"].as_bool().unwrap()).map(|m| m.to_hex());
+        if let (Some(w), Err(e)) = (sh["result"]["throws"].as_str(), &got) {
+            if e.0 != w {
+                fails.push(format!("path #{i}: {:?}, reference {w:?}", e.0));
+            }
+        }
+        expect(&mut fails, &format!("path #{i}"), &sh["result"], got);
+    }
+    assert!(fails.is_empty(), "{} failures:\n{}", fails.len(), fails.join("\n"));
+}

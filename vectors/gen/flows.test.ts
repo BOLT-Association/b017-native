@@ -129,5 +129,37 @@ test('write SimpleMultiBOLT flow vectors', async () => {
     log(snap('transfer', t))
   })
 
+  // failures at each stage: the covenant refuses, and the builder reports it
+  await run('settle-wrong-key', async (log) => {
+    const t = await new SimpleMultiBOLT().mint(issuerKey, freshSource(), '', bal(1000n))
+    await t.commit(key(101))
+    log(snap('commit', t))
+    t.signer = { publicKey: key(55).toPublicKey().encode(true) as number[], sign: (m: number[]) => key(55).sign(m) }
+    await t.settle(key(101))
+  })
+  await run('merge-bad-other', async (log) => {
+    const a = await new SimpleMultiBOLT().mint(issuerKey, freshSource(), '', bal(SIM))
+    const b = await new SimpleMultiBOLT().mint(issuerKey, freshSource(), '', bal(1n))
+    await a.transfer(key(101))
+    await b.transfer(key(102))
+    b.balance = bal(2n)
+    log(snap('before', a))
+    await a.merge(b, key(400))
+  })
+  await run('split-bad-balance', async (log) => {
+    const t = await new SimpleMultiBOLT().mint(issuerKey, freshSource(), '', bal(1000n))
+    await t.transfer(key(101))
+    t.balance = bal(999n)
+    log(snap('before', t))
+    await t.split(key(110), key(111), bal(1n))
+  })
+  await run('melt-wrong-key', async (log) => {
+    const t = await new SimpleMultiBOLT().mint(issuerKey, freshSource(), '', bal(1000n))
+    await t.transfer(key(101))
+    t.signer = { publicKey: key(55).toPublicKey().encode(true) as number[], sign: (m: number[]) => key(55).sign(m) }
+    log(snap('before', t))
+    await t.melt()
+  })
+
   writeFileSync(OUT, JSON.stringify(flows, null, 1))
 })

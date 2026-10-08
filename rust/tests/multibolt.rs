@@ -197,6 +197,41 @@ async fn scenario(name: &str, log: &mut Vec<Step>) -> b017::Result<()> {
             log.push(snap("pieceB2.split.main", &piece_b2));
             log.push(snap("pieceB2.split.piece", &b2));
         }
+        "settle-wrong-key" => {
+            let mut t = SimpleMultiBOLT::new();
+            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000))).await?;
+            t.commit(&rk(101), TransferOpts::default()).await?;
+            log.push(snap("commit", &t));
+            t.signer = Some(key(55));
+            t.settle(&rk(101), TransferOpts::default()).await?;
+        }
+        "merge-bad-other" => {
+            let mut a = SimpleMultiBOLT::new();
+            a.mint(issuer.clone(), &fresh(&issuer), Some(bal(SIM))).await?;
+            let mut b = SimpleMultiBOLT::new();
+            b.mint(issuer.clone(), &fresh(&issuer), Some(bal(1))).await?;
+            a.transfer(&rk(101), false, TransferOpts::default()).await?;
+            b.transfer(&rk(102), false, TransferOpts::default()).await?;
+            b.balance = bal(2);
+            log.push(snap("before", &a));
+            a.merge(&mut b, &rk(400), None).await?;
+        }
+        "split-bad-balance" => {
+            let mut t = SimpleMultiBOLT::new();
+            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000))).await?;
+            t.transfer(&rk(101), false, TransferOpts::default()).await?;
+            t.balance = bal(999);
+            log.push(snap("before", &t));
+            t.split(&rk(110), &rk(111), &bal(1), None).await?;
+        }
+        "melt-wrong-key" => {
+            let mut t = SimpleMultiBOLT::new();
+            t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000))).await?;
+            t.transfer(&rk(101), false, TransferOpts::default()).await?;
+            t.signer = Some(key(55));
+            log.push(snap("before", &t));
+            t.melt(None).await?;
+        }
         "inflated-balance" => {
             let mut t = SimpleMultiBOLT::new();
             t.mint(issuer.clone(), &fresh(&issuer), Some(bal(1000))).await?;

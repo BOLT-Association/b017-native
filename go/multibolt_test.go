@@ -272,6 +272,70 @@ var flowScenarios = map[string]func(ctx context.Context, log func(flowStep)) err
 		log(snapOf("pieceB2.split.piece", b2))
 		return nil
 	},
+	"settle-wrong-key": func(ctx context.Context, log func(flowStep)) error {
+		issuer := fkey(1)
+		t, err := NewSimpleMultiBOLT().Mint(ctx, issuer, freshSource(issuer), bal(big.NewInt(1000)))
+		if err != nil {
+			return err
+		}
+		if _, err = t.Commit(ctx, fkey(101), TransferOpts{}); err != nil {
+			return err
+		}
+		log(snapOf("commit", t))
+		t.Signer = fkey(55)
+		_, err = t.Settle(ctx, fkey(101), TransferOpts{})
+		return err
+	},
+	"merge-bad-other": func(ctx context.Context, log func(flowStep)) error {
+		issuer := fkey(1)
+		sim, _ := new(big.Int).SetString("1ffffffffffffe", 16)
+		a, err := NewSimpleMultiBOLT().Mint(ctx, issuer, freshSource(issuer), bal(sim))
+		if err != nil {
+			return err
+		}
+		b, err := NewSimpleMultiBOLT().Mint(ctx, issuer, freshSource(issuer), bal(big.NewInt(1)))
+		if err != nil {
+			return err
+		}
+		if _, err = a.Transfer(ctx, fkey(101), false, TransferOpts{}); err != nil {
+			return err
+		}
+		if _, err = b.Transfer(ctx, fkey(102), false, TransferOpts{}); err != nil {
+			return err
+		}
+		b.Balance = bal(big.NewInt(2))
+		log(snapOf("before", a))
+		_, err = a.Merge(ctx, b, fkey(400), nil)
+		return err
+	},
+	"split-bad-balance": func(ctx context.Context, log func(flowStep)) error {
+		issuer := fkey(1)
+		t, err := NewSimpleMultiBOLT().Mint(ctx, issuer, freshSource(issuer), bal(big.NewInt(1000)))
+		if err != nil {
+			return err
+		}
+		if _, err = t.Transfer(ctx, fkey(101), false, TransferOpts{}); err != nil {
+			return err
+		}
+		t.Balance = bal(big.NewInt(999))
+		log(snapOf("before", t))
+		_, _, err = t.Split(ctx, fkey(110), fkey(111), bal(big.NewInt(1)), nil)
+		return err
+	},
+	"melt-wrong-key": func(ctx context.Context, log func(flowStep)) error {
+		issuer := fkey(1)
+		t, err := NewSimpleMultiBOLT().Mint(ctx, issuer, freshSource(issuer), bal(big.NewInt(1000)))
+		if err != nil {
+			return err
+		}
+		if _, err = t.Transfer(ctx, fkey(101), false, TransferOpts{}); err != nil {
+			return err
+		}
+		t.Signer = fkey(55)
+		log(snapOf("before", t))
+		_, err = t.Melt(ctx, nil)
+		return err
+	},
 	"inflated-balance": func(ctx context.Context, log func(flowStep)) error {
 		issuer := fkey(1)
 		t, err := NewSimpleMultiBOLT().Mint(ctx, issuer, freshSource(issuer), bal(big.NewInt(1000)))
