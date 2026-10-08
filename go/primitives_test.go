@@ -198,3 +198,33 @@ func TestVectorsLockPay2Proof(t *testing.T) {
 		}
 	}
 }
+
+// TestStaticGetters checks the templates' constant getters against the reference's values.
+func TestStaticGetters(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(vectorsDir(), "static.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s struct {
+		Suffixes map[string]struct {
+			LockHex string `json:"lockHex"`
+		} `json:"suffixes"`
+	}
+	_ = json.Unmarshal(b, &s)
+	for name, got := range map[string]*Script{"MinSimple": MinSimpleTemplate{}.StaticSuffix(), "AuthBolt": AuthBoltTemplate{}.StaticSuffix(), "SimpleMulti": SimpleMultiTemplate{}.StaticSuffix()} {
+		if got.ToHex() != s.Suffixes[name].LockHex {
+			t.Errorf("%s static suffix differs", name)
+		}
+	}
+	// estimateLength values of the reference's templates
+	k := KeySigner{}
+	for want, tpl := range map[int]UnlockTemplate{108: P2PKHUnlock(k), 111: Pay2ProofUnlock(k, 0, nil), 2000: MinSimpleTemplate{}.Unlock(k, nil, nil, false, false),
+		400: SimpleMultiTemplate{}.Melt(k, nil, nil)} {
+		if tpl.EstimateLength() != want {
+			t.Errorf("estimateLength %d, want %d", tpl.EstimateLength(), want)
+		}
+	}
+	if (SimpleMultiTemplate{}).Unlock(k, nil, nil, SMBUnlockArgs{}).EstimateLength() != 2000 {
+		t.Error("SimpleMulti estimateLength")
+	}
+}

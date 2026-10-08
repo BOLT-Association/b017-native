@@ -165,3 +165,45 @@ fn vectors_lock_pay2proof() {
         );
     }
 }
+
+/// The templates' constant getters against the reference's values.
+#[test]
+fn static_getters() {
+    use b017::boltlib::UnlockTemplate;
+    use b017::nfttemplates::{AuthBoltTemplate, MinSimpleTemplate};
+    use b017::simplemulti::{SimpleMultiTemplate, SmbUnlockArgs};
+    let s: Value =
+        serde_json::from_str(&std::fs::read_to_string(vectors_dir().join("static.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        MinSimpleTemplate::static_suffix().to_hex(),
+        s["suffixes"]["MinSimple"]["lockHex"].as_str().unwrap()
+    );
+    assert_eq!(
+        AuthBoltTemplate::static_suffix().to_hex(),
+        s["suffixes"]["AuthBolt"]["lockHex"].as_str().unwrap()
+    );
+    assert_eq!(
+        SimpleMultiTemplate::static_suffix().to_hex(),
+        s["suffixes"]["SimpleMulti"]["lockHex"].as_str().unwrap()
+    );
+    let k: std::rc::Rc<dyn b017::sighash::Signer> =
+        std::rc::Rc::new(b017::sighash::KeySigner::from_hex(&"11".repeat(32)).unwrap());
+    assert_eq!(P2PKHUnlock(k.clone()).estimate_length(), 108);
+    assert_eq!(
+        Pay2ProofUnlock::new(k.clone(), 0, None).estimate_length(),
+        111
+    );
+    assert_eq!(
+        MinSimpleTemplate::unlock(k.clone(), &[], vec![], false, false).estimate_length(),
+        2000
+    );
+    assert_eq!(
+        SimpleMultiTemplate::melt(k.clone(), None, None).estimate_length(),
+        400
+    );
+    assert_eq!(
+        SimpleMultiTemplate::unlock(k, &[], vec![], SmbUnlockArgs::default()).estimate_length(),
+        2000
+    );
+}

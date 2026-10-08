@@ -1,0 +1,42 @@
+From 7304de329fbbdd63059896445cfb086de396b7e5 Mon Sep 17 00:00:00 2001
+From: Freddie Honohan <honohanf@gmail.com>
+Date: Thu, 8 Oct 2026 19:51:20 +0100
+Subject: [PATCH 3/4] Spend: an executed opcode above OP_NOP10 is invalid, as
+ in ts-sdk Spend and go-sdk
+
+0xba..=0xf8 were executed as no-ops, so a spend carrying an undefined
+opcode on its executed path validated here while ts-sdk and go-sdk (and
+node v1.2.0, FIRST_UNDEFINED_OP_VALUE) refuse it. Found by b017-native's
+differential corpus.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/script/spend_ops.rs | 12 ++++--------
+ 1 file changed, 4 insertions(+), 8 deletions(-)
+
+diff --git a/src/script/spend_ops.rs b/src/script/spend_ops.rs
+index c2b19ba..17e33a3 100644
+--- a/src/script/spend_ops.rs
++++ b/src/script/spend_ops.rs
+@@ -815,14 +815,10 @@ impl Spend {
+ 
+             // -- All NOPs (NOP11..NOP77 etc) ------------------------------------
+             _ => {
+-                // Any remaining opcode that is a NOP variant is a no-op.
+-                // Check if it's in the NOP range (0xba..=0xf8) or other known NOP.
+-                let byte = chunk.op_byte;
+-                if (0xba..=0xf8).contains(&byte) {
+-                    // NOP variant -- no operation
+-                } else {
+-                    return Err(ScriptError::InvalidOpcode(byte));
+-                }
++                // Every other opcode is invalid when executed: OP_NOP1, OP_NOP9 and OP_NOP10 (and OP_NOP2/3 as
++                // CHECKLOCKTIMEVERIFY / CHECKSEQUENCEVERIFY) are the only upgrade-NOP slots of node v1.2.0, and every
++                // value above 0xb9 is FIRST_UNDEFINED_OP_VALUE (ts-sdk Spend, go-sdk). An unexecuted branch skips them.
++                return Err(ScriptError::InvalidOpcode(chunk.op_byte));
+             }
+         }
+ 
+-- 
+2.51.0.windows.1
+
