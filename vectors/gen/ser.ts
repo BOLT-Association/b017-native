@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto'
 import { appendFileSync } from 'node:fs'
 import { PrivateKey, Transaction, Script } from '@bsv/sdk'
+import { expect } from 'vitest'
 
 export type NodeId = string
 export interface TxNode {
@@ -87,7 +88,7 @@ export function record(kind: string, body: Record<string, unknown>, g: Graph): v
   let test: string | undefined
   let file: string | undefined
   try {
-    const st = (globalThis as any).expect?.getState?.()
+    const st = expect.getState()
     test = st?.currentTestName
     file = st?.testPath ? String(st.testPath).replace(/\\/g, '/').replace(/^.*\/test\//, 'test/') : undefined
   } catch { /* outside a test */ }
