@@ -8,10 +8,10 @@ Reference: `../b017` (branch `async-signer`, commit `a305f58`), read-only. Its `
 | Phase | State |
 |---|---|
 | 0 vectors + Rust SDK fix | vectors recorded and packed; SDK fix committed locally (patch in `third_party/patches`) |
-| 1 primitives | Go done (Rust pending) |
-| 2 NFT path | Go done (Rust pending) |
-| 3 scanner | Go done (Rust pending) |
-| 4 fungible | Go done (Rust pending) |
+| 1 primitives | Go and Rust done |
+| 2 NFT path | Go and Rust done |
+| 3 scanner | Go and Rust done |
+| 4 fungible | Go and Rust done |
 | 5 hardening + p2p adapter | not started |
 
 ## Vectors (Phase 0)
@@ -90,6 +90,18 @@ cd ../b017-native && node vectors/gen/pack.mjs
   builder-branches, funding-source, second-piece, inflated-balance) reproduced tx for tx, prevTxs and balances
   included; the inflated-balance scenario fails in both on the covenant.
 
+## Rust port (phases 1-4)
+
+- Crate `b017` (`rust/`, workspace root `Cargo.toml`), on `bsv-sdk` from `third_party/bsv-rust-sdk` (patched).
+  Same files as Go. Transactions are `Rc<RefCell<Transaction>>` (`TxRef`): the reference mutates shared txs and
+  compares them by identity. The Signer is async (`sign` returns a boxed future; `KeySigner` wraps a PrivateKey;
+  `block_on` drives it without a runtime). Everything that would throw returns `Err`; nothing panics on input.
+  `TokenType` is an enum (`TokenType::SimpleMultiBOLT`), so the class keeps the name `SimpleMultiBOLT`.
+- `cargo test -p b017`: tests/primitives.rs, nft.rs, scanner.rs, multibolt.rs replay the same vectors as Go with the
+  same results (verifyTx 379, BEEF 46 + 63, all sign.* and lock.*, the scanner's 437 representable records field
+  for field with the same 2 skipped, flows tx for tx). The patched crate interpreter runs every b017 spend.
+
 ## Next
 
-The Rust port of phases 1-4 (`rust/`, on the patched bsv-sdk), then Phase 5.
+Phase 5: negative controls, coverage, differential fuzzing (TS / Go / Rust), the Go AuthBOLT verifier adapter for
+p2p (inside this repo), clippy / vet clean-up, CI workflow.
