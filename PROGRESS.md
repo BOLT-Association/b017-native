@@ -56,12 +56,14 @@ cd ../b017-native && node vectors/gen/pack.mjs
   `thread.subScript` after Chronicle). The crate's own 181 `script::` tests pass with it.
 - go-sdk v1.7.1 requires `go 1.26.0`; local Go is 1.25.3, so the toolchain directive downloads 1.26 on first build.
 
-## For the user (prepared, not done: no pushes, repos, forks, PRs or issues were created)
+## Published (at the user's request, 2026-10-08)
 
-1. Create `BOLT-Association/b017-native` and push this repo.
-2. Fork `b1narydt/bsv-rust-sdk` to `BOLT-Association/bsv-rust-sdk`, push branch `b017-codesep`, open the PR
-   upstream with `third_party/patches/0001-…patch`, and file an issue on `bsv-blockchain/rs-sdk` (same bug:
-   `src/script/spend_ops.rs` `get_subscript`).
+1. This repo: https://github.com/BOLT-Association/b017-native (public).
+2. Rust SDK: fork https://github.com/BOLT-Association/bsv-rust-sdk, branch `spend-ts-sdk-parity`
+   (= `third_party/patches`), upstream PR https://github.com/b1narydt/bsv-rust-sdk/pull/57. Not done: an issue on
+   `bsv-blockchain/rs-sdk` (its interpreter has the same `get_subscript` bug).
+3. go-sdk: no fork or PR. Its master already fixes the wide script-number reads the differential found
+   (GHSA-rh54-8fpg-8wwf, after v1.7.1), so `go/go.mod` pins master commit 511b58c until a release has it.
 
 ## Go port (phases 1-3)
 
