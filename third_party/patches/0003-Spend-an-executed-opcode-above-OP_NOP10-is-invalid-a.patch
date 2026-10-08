@@ -1,7 +1,7 @@
 From 7304de329fbbdd63059896445cfb086de396b7e5 Mon Sep 17 00:00:00 2001
 From: Freddie Honohan <honohanf@gmail.com>
 Date: Thu, 8 Oct 2026 19:51:20 +0100
-Subject: [PATCH 3/4] Spend: an executed opcode above OP_NOP10 is invalid, as
+Subject: [PATCH 3/6] Spend: an executed opcode above OP_NOP10 is invalid, as
  in ts-sdk Spend and go-sdk
 
 0xba..=0xf8 were executed as no-ops, so a spend carrying an undefined

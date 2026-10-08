@@ -1,7 +1,7 @@
 From 659356f6234a3619dd8594a50951251fccdaa0e7 Mon Sep 17 00:00:00 2001
 From: Freddie Honohan <honohanf@gmail.com>
 Date: Thu, 8 Oct 2026 19:29:54 +0100
-Subject: [PATCH 2/4] Spend: execute OP_2MUL and OP_2DIV (multiply / divide the
+Subject: [PATCH 2/6] Spend: execute OP_2MUL and OP_2DIV (multiply / divide the
  top number by 2), as ts-sdk Spend does
 
 They were refused as disabled opcodes. Chronicle re-enabled them, and ts-sdk's

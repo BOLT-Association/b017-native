@@ -1,0 +1,360 @@
+From 67b9ba5e5cf8d7350bb47057f0e13dcf5ef1b063 Mon Sep 17 00:00:00 2001
+From: Freddie Honohan <honohanf@gmail.com>
+Date: Thu, 8 Oct 2026 21:57:45 +0100
+Subject: [PATCH 5/6] Spend: shifts, splices, truncated pushes and the
+ unlock/lock boundary as ts-sdk Spend has them
+
+- OP_LSHIFTNUM / OP_RSHIFTNUM: a negative or > INT_MAX bit count is an error (it was read as 0); a left shift
+  past the memory limit is refused before it is allocated (a 39 GB allocation aborted the process).
+- OP_SUBSTR / OP_LEFT / OP_RIGHT: operands read and clamped as ts-sdk reads them; ts-sdk's range rules (an
+  offset must be inside the data); negative operands no longer wrap to huge indexes and panic.
+- A push that runs past the end of its script fails, executed or not (chunks record their declared length).
+- An OP_IF left open by the unlocking script fails; the alt stack does not carry into the locking script.
+
+Found by b017-native's interpreter differential (20000 random scripts through ts-sdk Spend).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/script/script.rs       |  16 +++--
+ src/script/script_chunk.rs |  26 ++++++++-
+ src/script/spend.rs        |  31 ++++++++++
+ src/script/spend_ops.rs    | 116 ++++++++++++++++++++++---------------
+ 4 files changed, 137 insertions(+), 52 deletions(-)
+
+diff --git a/src/script/script.rs b/src/script/script.rs
+index 8e5cbab..f69da28 100644
+--- a/src/script/script.rs
++++ b/src/script/script.rs
+@@ -412,17 +412,19 @@ impl Script {
+                 let push_len = op_byte as usize;
+                 let end = (pos + push_len).min(length);
+                 let data = bytes[pos..end].to_vec();
+-                chunks.push(ScriptChunk::new_raw(op_byte, Some(data)));
++                chunks.push(ScriptChunk::new_parsed_push(op_byte, data, push_len));
+                 pos = end;
+             } else if op_byte == Op::OpPushData1.to_byte() {
+-                let push_len = if pos < length { bytes[pos] as usize } else { 0 };
++                let has_len = pos < length;
++                let push_len = if has_len { bytes[pos] as usize } else { 0 };
+                 // A bare OP_PUSHDATA1 is malformed but must remain safe to
+                 // parse.  Match the PUSHDATA2/4 branches by clamping the
+                 // length-byte advance to the available input.
+                 pos = (pos + 1).min(length);
+                 let end = (pos + push_len).min(length);
+                 let data = bytes[pos..end].to_vec();
+-                chunks.push(ScriptChunk::new_raw(op_byte, Some(data)));
++                let declared = if has_len { push_len } else { usize::MAX };
++                chunks.push(ScriptChunk::new_parsed_push(op_byte, data, declared));
+                 pos = end;
+             } else if op_byte == Op::OpPushData2.to_byte() {
+                 let b0 = if pos < length { bytes[pos] as usize } else { 0 };
+@@ -432,10 +434,12 @@ impl Script {
+                     0
+                 };
+                 let push_len = b0 | (b1 << 8);
++                let has_len = pos + 1 < length;
+                 pos = (pos + 2).min(length);
+                 let end = (pos + push_len).min(length);
+                 let data = bytes[pos..end].to_vec();
+-                chunks.push(ScriptChunk::new_raw(op_byte, Some(data)));
++                let declared = if has_len { push_len } else { usize::MAX };
++                chunks.push(ScriptChunk::new_parsed_push(op_byte, data, declared));
+                 pos = end;
+             } else if op_byte == Op::OpPushData4.to_byte() {
+                 let b0 = if pos < length { bytes[pos] as usize } else { 0 };
+@@ -455,10 +459,12 @@ impl Script {
+                     0
+                 };
+                 let push_len = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
++                let has_len = pos + 3 < length;
+                 pos = (pos + 4).min(length);
+                 let end = (pos + push_len).min(length);
+                 let data = bytes[pos..end].to_vec();
+-                chunks.push(ScriptChunk::new_raw(op_byte, Some(data)));
++                let declared = if has_len { push_len } else { usize::MAX };
++                chunks.push(ScriptChunk::new_parsed_push(op_byte, data, declared));
+                 pos = end;
+             } else {
+                 // Regular opcode with no data
+diff --git a/src/script/script_chunk.rs b/src/script/script_chunk.rs
+index d62eeeb..28b9f80 100644
+--- a/src/script/script_chunk.rs
++++ b/src/script/script_chunk.rs
+@@ -5,7 +5,7 @@
+ use crate::script::op::Op;
+ 
+ /// A single parsed element of a script.
+-#[derive(Debug, Clone, PartialEq, Eq)]
++#[derive(Debug, Clone)]
+ pub struct ScriptChunk {
+     /// The opcode. For direct pushes (0x01..=0x4b) this is the raw byte
+     /// cast via `Op::from`, which gives `OpInvalidOpcode`. The parser
+@@ -16,8 +16,20 @@ pub struct ScriptChunk {
+     pub op_byte: u8,
+     /// The pushed data, if any.
+     pub data: Option<Vec<u8>>,
++    /// For a push read by the parser, the length its opcode declared (`usize::MAX` when the length bytes
++    /// themselves were missing); a shorter `data` means the script ended inside the push. `None` for chunks
++    /// built in code. Not part of equality.
++    pub declared_len: Option<usize>,
+ }
+ 
++impl PartialEq for ScriptChunk {
++    fn eq(&self, other: &Self) -> bool {
++        self.op == other.op && self.op_byte == other.op_byte && self.data == other.data
++    }
++}
++
++impl Eq for ScriptChunk {}
++
+ impl ScriptChunk {
+     /// Create a new chunk with just an opcode (no data).
+     pub fn new_opcode(op: Op) -> Self {
+@@ -25,6 +37,7 @@ impl ScriptChunk {
+             op,
+             op_byte: op.to_byte(),
+             data: None,
++            declared_len: None,
+         }
+     }
+ 
+@@ -34,6 +47,17 @@ impl ScriptChunk {
+             op: Op::from(op_byte),
+             op_byte,
+             data,
++            declared_len: None,
++        }
++    }
++
++    /// A push chunk as the parser read it, with the length its opcode declared.
++    pub fn new_parsed_push(op_byte: u8, data: Vec<u8>, declared_len: usize) -> Self {
++        ScriptChunk {
++            op: Op::from(op_byte),
++            op_byte,
++            data: Some(data),
++            declared_len: Some(declared_len),
+         }
+     }
+ 
+diff --git a/src/script/spend.rs b/src/script/spend.rs
+index d73223e..d9f02c7 100644
+--- a/src/script/spend.rs
++++ b/src/script/spend.rs
+@@ -135,6 +135,16 @@ impl Spend {
+             return Err(ScriptError::PushOnlyViolation);
+         }
+ 
++        // An OP_IF opened in the unlocking script must be closed there (ts-sdk Spend); the alt stack does not
++        // carry over into the locking script.
++        if !self.if_stack.is_empty() {
++            return Err(ScriptError::InvalidScript(
++                "Every OP_IF, OP_NOTIF, or OP_ELSE must be terminated with OP_ENDIF prior to the end of the unlocking script.".to_string(),
++            ));
++        }
++        self.alt_stack.clear();
++        self.alt_stack_mem = 0;
++
+         // Phase 2: Execute locking script
+         self.context = ScriptContext::Locking;
+         self.program_counter = 0;
+@@ -197,6 +207,18 @@ impl Spend {
+         let chunk = chunks[self.program_counter].clone();
+         let op = chunk.op;
+ 
++        // A push that runs past the end of its script is malformed, executed or not (ts-sdk Spend).
++        if Self::push_is_truncated(&chunk) {
++            let ctx = match self.context {
++                ScriptContext::Unlocking => "UnlockingScript",
++                ScriptContext::Locking => "LockingScript",
++            };
++            return Err(ScriptError::InvalidScript(format!(
++                "Malformed push data in {ctx} at pc={}.",
++                self.program_counter
++            )));
++        }
++
+         // Script execution is suspended when either (a) we're in a FALSE
+         // branch of an open IF, or (b) an OP_RETURN inside an open IF set
+         // the `returning_from_conditional` flag. In both cases, only the
+@@ -255,6 +277,15 @@ impl Spend {
+         Ok(false)
+     }
+ 
++    /// Whether a parsed push chunk carries fewer bytes than its opcode declares (the script ended inside it).
++    /// The parser records the declared length in `declared_len` for PUSHDATA1/2/4.
++    fn push_is_truncated(chunk: &crate::script::script_chunk::ScriptChunk) -> bool {
++        match chunk.declared_len {
++            Some(n) => chunk.data.as_ref().map_or(0, |d| d.len()) != n,
++            None => false,
++        }
++    }
++
+     /// Whether the interpreter is in relaxed mode.
+     ///
+     /// Relaxed mode is active when transaction_version > 1 or explicitly overridden.
+diff --git a/src/script/spend_ops.rs b/src/script/spend_ops.rs
+index 17e33a3..e0f9f73 100644
+--- a/src/script/spend_ops.rs
++++ b/src/script/spend_ops.rs
+@@ -719,51 +719,42 @@ impl Spend {
+ 
+             // -- Chronicle 2026 Opcodes -----------------------------------------
+             Op::OpSubstr => {
+-                // stack: data, begin, length -> substring
+-                let len_bytes = self.pop_stack()?;
+-                let begin_bytes = self.pop_stack()?;
++                // ts-sdk Spend: stack data, offset, length -> data[offset .. offset + length]
++                let len = self.splice_operand()?;
++                let offset = self.splice_operand()?;
+                 let data = self.pop_stack()?;
+-                let begin = BigNumber::from_script_num(&begin_bytes, !self.is_relaxed(), None)
+-                    .map_err(|e| ScriptError::InvalidScript(e.to_string()))?;
+-                let len = BigNumber::from_script_num(&len_bytes, !self.is_relaxed(), None)
+-                    .map_err(|e| ScriptError::InvalidScript(e.to_string()))?;
+-                let begin_val = begin.to_number().unwrap_or(0) as usize;
+-                let len_val = len.to_number().unwrap_or(0) as usize;
+-                if begin_val + len_val > data.len() {
+-                    return Err(ScriptError::InvalidStackOperation(
+-                        "OP_SUBSTR: range out of bounds".to_string(),
+-                    ));
++                let size = data.len() as i64;
++                if offset < 0 || offset >= size || len < 0 || len > size - offset {
++                    return Err(ScriptError::InvalidStackOperation(format!(
++                        "OP_SUBSTR offset ({offset}) must be in range [0, {size}) and length ({len}) must be in range [0, {}]",
++                        size - offset
++                    )));
+                 }
+-                let result = data[begin_val..begin_val + len_val].to_vec();
+-                self.push_stack(result)?;
++                self.push_stack(data[offset as usize..(offset + len) as usize].to_vec())?;
+             }
+ 
+             Op::OpLeft => {
+-                let n_bytes = self.pop_stack()?;
++                let len = self.splice_operand()?;
+                 let data = self.pop_stack()?;
+-                let n = BigNumber::from_script_num(&n_bytes, !self.is_relaxed(), None)
+-                    .map_err(|e| ScriptError::InvalidScript(e.to_string()))?;
+-                let n_val = n.to_number().unwrap_or(0) as usize;
+-                if n_val > data.len() {
+-                    return Err(ScriptError::InvalidStackOperation(
+-                        "OP_LEFT: position out of range".to_string(),
+-                    ));
++                let size = data.len() as i64;
++                if len < 0 || len > size {
++                    return Err(ScriptError::InvalidStackOperation(format!(
++                        "OP_LEFT length ({len}) must be in range [0, {size}]"
++                    )));
+                 }
+-                self.push_stack(data[..n_val].to_vec())?;
++                self.push_stack(data[..len as usize].to_vec())?;
+             }
+ 
+             Op::OpRight => {
+-                let n_bytes = self.pop_stack()?;
++                let len = self.splice_operand()?;
+                 let data = self.pop_stack()?;
+-                let n = BigNumber::from_script_num(&n_bytes, !self.is_relaxed(), None)
+-                    .map_err(|e| ScriptError::InvalidScript(e.to_string()))?;
+-                let n_val = n.to_number().unwrap_or(0) as usize;
+-                if n_val > data.len() {
+-                    return Err(ScriptError::InvalidStackOperation(
+-                        "OP_RIGHT: position out of range".to_string(),
+-                    ));
++                let size = data.len() as i64;
++                if len < 0 || len > size {
++                    return Err(ScriptError::InvalidStackOperation(format!(
++                        "OP_RIGHT length ({len}) must be in range [0, {size}]"
++                    )));
+                 }
+-                self.push_stack(data[data.len() - n_val..].to_vec())?;
++                self.push_stack(data[(size - len) as usize..].to_vec())?;
+             }
+ 
+             Op::OpLShiftNum => {
+@@ -773,14 +764,16 @@ impl Spend {
+                     .map_err(|e| ScriptError::InvalidScript(e.to_string()))?;
+                 let n = BigNumber::from_script_num(&n_bytes, !self.is_relaxed(), None)
+                     .map_err(|e| ScriptError::InvalidScript(e.to_string()))?;
+-                let shift = n.to_number().unwrap_or(0);
+-                if shift < 0 {
+-                    return Err(ScriptError::InvalidStackOperation(
+-                        "negative shift".to_string(),
+-                    ));
++                let shift = Self::shift_count(&n, "OP_LSHIFTNUM")?;
++                // A non-zero value shifted past the memory limit cannot be held: refuse it before allocating it
++                // (ts-sdk's BigInt fails the same way; the stack's memory limit would refuse the result anyway).
++                if !a.is_zero() && a.bit_length().saturating_add(shift) > self.memory_limit.saturating_mul(8) {
++                    return Err(ScriptError::MemoryLimitExceeded);
+                 }
+                 let mut result = a;
+-                result.iushln(shift as usize);
++                if !result.is_zero() {
++                    result.iushln(shift);
++                }
+                 self.push_stack(result.to_script_num())?;
+             }
+ 
+@@ -791,14 +784,13 @@ impl Spend {
+                     .map_err(|e| ScriptError::InvalidScript(e.to_string()))?;
+                 let n = BigNumber::from_script_num(&n_bytes, !self.is_relaxed(), None)
+                     .map_err(|e| ScriptError::InvalidScript(e.to_string()))?;
+-                let shift = n.to_number().unwrap_or(0);
+-                if shift < 0 {
+-                    return Err(ScriptError::InvalidStackOperation(
+-                        "negative shift".to_string(),
+-                    ));
+-                }
++                let shift = Self::shift_count(&n, "OP_RSHIFTNUM")?;
+                 let mut result = a;
+-                result.iushrn(shift as usize);
++                if shift >= result.bit_length() {
++                    result = BigNumber::from_number(0);
++                } else {
++                    result.iushrn(shift);
++                }
+                 self.push_stack(result.to_script_num())?;
+             }
+ 
+@@ -827,6 +819,38 @@ impl Spend {
+ 
+     // -- Arithmetic helpers ---------------------------------------------------
+ 
++    /// A splice operand (OP_SUBSTR / OP_LEFT / OP_RIGHT), as ts-sdk `Spend` reads it: a script number (minimally
++    /// encoded when not relaxed); more than 8 bytes reads the first 8 as a two's-complement i64; clamped to the
++    /// 32-bit range.
++    fn splice_operand(&mut self) -> Result<i64, ScriptError> {
++        let b = self.pop_stack()?;
++        let n = BigNumber::from_script_num(&b, !self.is_relaxed(), None)
++            .map_err(|e| ScriptError::InvalidScript(e.to_string()))?;
++        let v: i64 = if b.len() > 8 {
++            let mut a = [0u8; 8];
++            a.copy_from_slice(&b[..8]);
++            i64::from_le_bytes(a)
++        } else {
++            n.to_number().unwrap_or(0)
++        };
++        Ok(v.clamp(-0x8000_0000, 0x7fff_ffff))
++    }
++
++    /// The bit count of OP_LSHIFTNUM / OP_RSHIFTNUM, as ts-sdk `Spend` checks it: not negative, at most INT_MAX.
++    fn shift_count(n: &BigNumber, op: &str) -> Result<usize, ScriptError> {
++        if n.is_neg() {
++            return Err(ScriptError::InvalidStackOperation(format!(
++                "{op} bits to shift must not be negative."
++            )));
++        }
++        match n.to_number() {
++            Some(s) if s <= 0x7fff_ffff => Ok(s as usize),
++            _ => Err(ScriptError::InvalidStackOperation(format!(
++                "{op} shift count exceeds INT_MAX."
++            ))),
++        }
++    }
++
+     /// Pop one value, apply unary function, push result.
+     fn unary_arith_op<F>(&mut self, f: F) -> Result<(), ScriptError>
+     where
+-- 
+2.51.0.windows.1
+

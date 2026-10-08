@@ -1,9 +1,9 @@
 package b017
 
 // spend.go - the reference's `new Spend({...}).validate()` (@bsv/sdk Spend) on go-sdk's interpreter.
-// TS relaxes a spend by the SPENDING tx's version: version > 1 runs after-Genesis / after-Chronicle rules with no
-// malleability policy (SIGPUSHONLY, CLEANSTACK, MINIMALDATA, LOW_S, NULLDUMMY off); version 1 runs pre-Genesis
-// with that policy on. TS validate() throws on every failure (it never returns false), so a failure here is an
+// TS (no explicit flags) runs after-Chronicle consensus for every version and relaxes the malleability policy by the
+// SPENDING tx's version: version 1 enforces SIGPUSHONLY, CLEANSTACK, MINIMALDATA, LOW_S and NULLDUMMY; version > 1
+// does not. TS validate() throws on every failure (it never returns false), so a failure here is an
 // error whose text is go-sdk's (compared by prefix only, see PROGRESS.md).
 
 import (
@@ -65,12 +65,12 @@ func Validate(p SpendParams) error {
 		interpreter.WithTx(gtx, p.InputIndex, prev),
 		interpreter.WithForkID(),
 	}
-	if p.TransactionVersion > 1 {
-		opts = append(opts, interpreter.WithAfterChronicle())
-	} else {
-		// go-sdk (like Bitcoin Core) refuses CLEANSTACK without BIP16; BIP16 only changes P2SH-shaped locks,
-		// which TS Spend never special-cases and b017 never builds.
-		opts = append(opts, interpreter.WithBeforeGenesis(), interpreter.WithFlags(
+	// TS Spend without explicit flags runs after-Chronicle consensus for every version; a version-1 spend adds the
+	// malleability policy. go-sdk refuses CLEANSTACK without BIP16 (as Bitcoin Core does); BIP16 only changes
+	// P2SH-shaped locks, which TS Spend never special-cases and b017 never builds.
+	opts = append(opts, interpreter.WithAfterChronicle())
+	if p.TransactionVersion <= 1 {
+		opts = append(opts, interpreter.WithFlags(
 			scriptflag.Bip16|scriptflag.VerifySigPushOnly|scriptflag.VerifyCleanStack|scriptflag.VerifyMinimalData|
 				scriptflag.VerifyLowS|scriptflag.StrictMultiSig|scriptflag.VerifyStrictEncoding|scriptflag.VerifyDERSignatures))
 	}
