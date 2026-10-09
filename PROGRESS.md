@@ -57,7 +57,9 @@ cd ../b017-native && node vectors/gen/pack.mjs
 - Native fuzzing: Go `FuzzScript`, `FuzzTransaction`, `FuzzFromBeef`, `FuzzVerifyEvents` about 5.4M executions, no
   panic; Rust seeded random fuzz (`tests/fuzz_random.rs`) 300k iterations, no panic.
 - AuthBOLT: `go/authbolt` agrees with the JS sidecar (`packages/bolt` `verifyIdentity`) on all 8 cases
-  (`TestAgreesWithTheSidecar`, reference outputs from `vectors/gen/authbolt-ref.mjs`).
+  (`TestAgreesWithTheSidecar`, reference outputs from `vectors/gen/authbolt-ref.mjs`), including `mintTxid` and
+  `holderPubKey`. The mint rule (2026-10-09, `docs/p2p-integration.md`): a presentation must spend its token's own
+  mint; `vectors/authbolt.json` is the recorded refusal of a token moved since its mint.
 
 ## Negative controls (plan, Verification)
 

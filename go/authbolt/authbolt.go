@@ -11,6 +11,7 @@
 package authbolt
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -20,14 +21,17 @@ import (
 	b017 "github.com/BOLT-Association/b017-native/go"
 )
 
-// Result is p2p's authbolt.Result (the sidecar's verdict).
+// Result is p2p's authbolt.Result (the sidecar's verdict). MintTxid is the genuine mint the presented commit
+// spends, and HolderPubKey the key that signed the commit (the mint's owner), as verifyIdentity answers them.
 type Result struct {
-	OK      bool   `json:"ok"`
-	Reason  string `json:"reason"`
-	Issuer  string `json:"issuer"`
-	Holder  string `json:"holder"`
-	TokenID string `json:"tokenId"`
-	Purpose string `json:"purpose"`
+	OK           bool   `json:"ok"`
+	Reason       string `json:"reason"`
+	Issuer       string `json:"issuer"`
+	Holder       string `json:"holder"`
+	TokenID      string `json:"tokenId"`
+	Purpose      string `json:"purpose"`
+	MintTxid     string `json:"mintTxid,omitempty"`
+	HolderPubKey string `json:"holderPubKey,omitempty"`
 }
 
 // AuthDataBytes is AUTH_DATA_BYTES: [tag 1][app public key 33][SHA-256 of the challenge statement 32].
@@ -227,6 +231,10 @@ func (v *Verifier) Verify(ctx context.Context, pkg []string, appKey, data string
 	if issuer == "" {
 		return Result{Reason: "no BOLT token in the package"}, nil
 	}
+	mint, reason := mintProvenance(pkg, strings.ToLower(data))
+	if reason != "" {
+		return Result{Reason: reason}, nil
+	}
 	r, reason := v.verify(ctx, pkg, issuer)
 	if r == nil {
 		return Result{Reason: reason}, nil
@@ -240,5 +248,55 @@ func (v *Verifier) Verify(ctx context.Context, pkg []string, appKey, data string
 	if r.owner != r.holder {
 		return Result{Reason: "a presentation must be a self-transfer: it moves the token to another key"}, nil
 	}
-	return Result{OK: true, Issuer: r.issuer, Holder: r.holder, TokenID: r.tokenID, Purpose: decoded.Purpose}, nil
+	if r.issuer != mint.issuer {
+		return Result{Reason: "the presented token's issuer is not its mint's"}, nil
+	}
+	return Result{OK: true, Issuer: r.issuer, Holder: r.holder, TokenID: r.tokenID, Purpose: decoded.Purpose,
+		MintTxid: mint.txid, HolderPubKey: mint.signer}, nil
+}
+
+// minted is what mintProvenance found: the mint the commit spends, its issuer, and the key that signed the commit.
+type minted struct{ txid, issuer, signer string }
+
+// mintProvenance is identity.js mintProvenance: the presented commit (the transaction whose first input carries
+// this auth data) must spend a mint the package carries. A mint transaction alone does not show its sender holds
+// the issuer key, and a token whose lineage did not pass through a genuine mint proves no ownership (audit V1);
+// a commit that spends the mint does, because spending a mint needs the issuer key under the covenant's genesis
+// guard, which the full verify then executes. No network call is made.
+func mintProvenance(pkg []string, data string) (minted, string) {
+	want, err := hex.DecodeString(data)
+	if err != nil {
+		return minted{}, "the presentation carries other data than this challenge"
+	}
+	for _, entry := range pkg {
+		tx, err := b017.FromBeef(entry)
+		if err != nil || len(tx.Inputs) == 0 || tx.Inputs[0].UnlockingScript == nil {
+			continue
+		}
+		in := tx.Inputs[0]
+		if !bytes.Equal(b017.ChunkData(in.UnlockingScript, 0), want) {
+			continue // not the commit
+		}
+		src := in.SourceTransaction
+		if src == nil {
+			return minted{}, "the presentation does not carry the mint its token was spent from"
+		}
+		id, err := src.ID()
+		if err != nil || (in.SourceTXID != "" && in.SourceTXID != id) {
+			return minted{}, "the presentation's mint does not match the outpoint its commit spends"
+		}
+		tok, ok := ReadToken(src, int(in.SourceOutputIndex))
+		if !ok || !tok.IsMint {
+			return minted{}, "the presented token does not come straight from its mint: no proof of ownership"
+		}
+		m := minted{txid: id, issuer: hex.EncodeToString(tok.Issuer)}
+		for _, c := range in.UnlockingScript.Chunks() {
+			if len(c.Data) == 33 && (c.Data[0] == 2 || c.Data[0] == 3) && bytes.Equal(b017.Hash160(c.Data), tok.Owner) {
+				m.signer = hex.EncodeToString(c.Data)
+				break
+			}
+		}
+		return m, ""
+	}
+	return minted{}, "the presentation carries other data than this challenge" // no commit carries it
 }

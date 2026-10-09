@@ -217,7 +217,8 @@ func TestAgreesWithTheSidecar(t *testing.T) {
 		c := cs[i]
 		v := &Verifier{Broadcast: seenBroadcaster(c.Broadcast)}
 		got, _ := v.Verify(context.Background(), c.Package, c.AppPubKey, c.Data)
-		if got.OK != want.OK || got.Issuer != want.Issuer || got.Holder != want.Holder || got.TokenID != want.TokenID || got.Purpose != want.Purpose {
+		if got.OK != want.OK || got.Issuer != want.Issuer || got.Holder != want.Holder || got.TokenID != want.TokenID || got.Purpose != want.Purpose ||
+			got.MintTxid != want.MintTxid || got.HolderPubKey != want.HolderPubKey {
 			t.Errorf("%s: Go %+v, reference %+v", c.name, got, want)
 		}
 		if got.Reason != want.Reason {

@@ -39,13 +39,24 @@ p2p branch `inprocess-verifier` (F1r3Hydr4nt/p2p): `dac8d3b` (in process), `5346
    (`NC_NO_VERIFIER=1`) cuts p2pd off from Arcade and chaintracks and fails at registration. `VERIFIER=sidecar`
    runs the same test through the sidecar.
 
+## The mint rule (2026-10-09)
+
+`Verify` refuses a presentation unless its commit (the transaction whose first input carries the auth data)
+spends a mint the package carries. A mint transaction alone does not show its sender holds the issuer key, and a
+token moved since its mint proves no ownership; a commit + settle presentation that spends the mint does, because
+spending a mint needs the issuer key (the covenant's genesis guard), which the full verify then executes. The check
+runs before any network call; an accepted verdict names `mintTxid` and `holderPubKey` (the key that signed the
+commit). It matches the reference (`packages/bolt` `verifyIdentity`) and p2p's boltverifyd. Test:
+`TestAPresentationMustSpendItsMint` on `vectors/authbolt.json` (a genuine presentation of a token rotated on chain,
+recorded by `vectors/gen/authbolt-moved.mjs`); negative control: drop the `IsMint` check and it is accepted.
+
 ## What p2p asks of this package next
 
 p2p's plan (`docs/claude-memory/plans/peerloop-holder-signatures.md`) wants to keep p2pd standard-library only by
 moving this package into a separate loopback-only verifier process, and asks here for:
 
-- the data check (auth data in the commit's unlocking script) before `VerifyAndBroadcast`, so a package carrying
-  the wrong data makes no network call;
+- ~~the data check before `VerifyAndBroadcast`~~: done by the mint rule (a package with no commit carrying the
+  data is refused before any network call);
 - dropping the `transaction` import in `spend.go` (it pulls in go-sdk's chaintracker and go-whatsonchain) if the
   interpreter can be fed without it;
 - tagged releases instead of pseudo-versions.
