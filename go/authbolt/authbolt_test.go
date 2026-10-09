@@ -229,3 +229,51 @@ func TestAgreesWithTheSidecar(t *testing.T) {
 		t.Fatalf("reference answered %d of %d cases", i, len(cs))
 	}
 }
+
+// The mint rule (audit V1 in PeerLoop's security audit): a presentation proves the presenter holds the issuer
+// key only when its commit spends the token's own mint, carried in the package (the covenant's genesis guard needs
+// the issuer key to spend a mint). A token that has moved since its mint proves no ownership. vectors/authbolt.json
+// holds a genuine such presentation, recorded from the reference with its verdict (vectors/gen/authbolt-moved.mjs).
+// The rule is checked before the network is asked. NC: drop the IsMint check in mintProvenance; this goes red.
+func TestAPresentationMustSpendItsMint(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "vectors", "authbolt.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f struct {
+		Cases []struct {
+			Name      string
+			Package   []string
+			AppPubKey string
+			Data      string
+			Reference Result
+		}
+	}
+	if err := json.Unmarshal(b, &f); err != nil || len(f.Cases) == 0 {
+		t.Fatalf("vectors/authbolt.json: %v", err)
+	}
+	for _, c := range f.Cases {
+		asked := 0
+		v := &Verifier{Broadcast: func(context.Context, *b017.Transaction) (b017.AnchorBroadcastResult, error) {
+			asked++
+			return b017.AnchorBroadcastResult{Status: "already-seen"}, nil
+		}}
+		r, err := v.Verify(context.Background(), c.Package, c.AppPubKey, c.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.OK || r.Reason != c.Reference.Reason {
+			t.Errorf("%s: %+v, want the reference's refusal %q", c.Name, r, c.Reference.Reason)
+		}
+		if asked != 0 {
+			t.Errorf("%s: the network was asked %d times before the mint rule refused", c.Name, asked)
+		}
+	}
+	// A genuine presentation names the mint it spends and the key that signed the commit.
+	cs := cases(t)
+	r, _ := (&Verifier{Broadcast: seenBroadcaster("already-seen")}).Verify(context.Background(), cs[0].Package, cs[0].AppPubKey, cs[0].Data)
+	mint, _ := identity(t, key(7)).ID()
+	if !r.OK || r.MintTxid != mint || r.HolderPubKey != hex.EncodeToString(key(7).PublicKey()) {
+		t.Errorf("a genuine presentation: %+v, want mint %s and holder key %x", r, mint, key(7).PublicKey())
+	}
+}
