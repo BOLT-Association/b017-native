@@ -31,7 +31,8 @@ type Result struct {
 	TokenID      string `json:"tokenId"`
 	Purpose      string `json:"purpose"`
 	MintTxid     string `json:"mintTxid,omitempty"`
-	HolderPubKey string `json:"holderPubKey,omitempty"`
+	HolderPubKey string `json:"holderPubKey,omitempty"` // no longer set: the holder key's hash is Holder
+	Count        uint32 `json:"count,omitempty"`        // the holder count a registration names
 }
 
 // AuthDataBytes is AUTH_DATA_BYTES: [tag 1][app public key 33][SHA-256 of the challenge statement 32].
@@ -226,7 +227,9 @@ func (v *Verifier) verify(ctx context.Context, pkg []string, issuer string) (*ch
 	return c, ""
 }
 
-// Verify is identity.js verifyIdentity({ handler, package, appPubKey, data }) with p2p's Verifier signature.
+// Verify is identity.js verifyIdentity({ handler, package, appPubKey, data }) with p2p's Verifier signature: a
+// registration (or reissue) must move the token out of its own mint to the identity's next holder, in a commit
+// and settle that are funded and seen by the network. Holder is the new holder key's hash; Count the holder count.
 func (v *Verifier) Verify(ctx context.Context, pkg []string, appKey, data string) (Result, error) {
 	app, err := CheckAppKey(appKey)
 	if err != nil {
@@ -238,6 +241,9 @@ func (v *Verifier) Verify(ctx context.Context, pkg []string, appKey, data string
 	}
 	if decoded.AppPubKey != app {
 		return Result{Reason: "the auth data names another app"}, nil
+	}
+	if decoded.Purpose != "register" && decoded.Purpose != "reissue" {
+		return Result{Reason: decoded.Purpose + " data does not register an identity"}, nil
 	}
 	var issuer string
 	for _, entry := range pkg {
@@ -261,20 +267,23 @@ func (v *Verifier) Verify(ctx context.Context, pkg []string, appKey, data string
 	if r == nil {
 		return Result{Reason: reason}, nil
 	}
-	if r.kind != "presentation" || r.t != b017.TypeAuth {
-		return Result{Reason: "not an AuthBOLT presentation"}, nil
+	if r.t != b017.TypeAuth {
+		return Result{Reason: "not an AuthBOLT"}, nil
+	}
+	if r.kind == "presentation" {
+		return Result{Reason: "a registration must be on chain: this move was never funded or broadcast"}, nil
+	}
+	if r.kind != "transfer" {
+		return Result{Reason: "a registration moves the token once (a commit and a settle)"}, nil
 	}
 	if r.data != strings.ToLower(data) {
 		return Result{Reason: "the presentation carries other data than this challenge"}, nil
 	}
-	if r.owner != r.holder {
-		return Result{Reason: "a presentation must be a self-transfer: it moves the token to another key"}, nil
-	}
 	if r.issuer != mint.issuer {
 		return Result{Reason: "the presented token's issuer is not its mint's"}, nil
 	}
-	return Result{OK: true, Issuer: r.issuer, Holder: r.holder, TokenID: r.tokenID, Purpose: decoded.Purpose,
-		MintTxid: mint.txid, HolderPubKey: mint.signer}, nil
+	return Result{OK: true, Issuer: r.issuer, Holder: r.owner, TokenID: r.tokenID, Purpose: decoded.Purpose,
+		MintTxid: mint.txid, Count: decoded.Count}, nil
 }
 
 // minted is what mintProvenance found: the mint the commit spends, its issuer, and the key that signed the commit.

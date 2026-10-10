@@ -116,18 +116,18 @@ func TestArcadeTrustsOwnHeaders(t *testing.T) {
 	}
 }
 
-// TestVerifierWithHeaders runs a presentation whose anchor is proven by p2pd-style headers (HeadersOf).
+// TestVerifierWithHeaders runs a registration through Arcade's status and p2pd-style headers (HeadersOf).
 func TestVerifierWithHeaders(t *testing.T) {
 	owner, app := key(7), key(8)
 	mint := identity(t, owner)
-	data := authData("03", app)
+	data := authData("01", app)
 	db, _ := hex.DecodeString(data)
-	pkg := present(t, mint, owner, b017.Hash160(owner.PublicKey()), db)
+	pkg := move(t, mint, owner, b017.Hash160(key(10).PublicKey()), db, true)
 	srv := httptest.NewServer(&fakeArcade{status: "SEEN_ON_NETWORK"})
 	defer srv.Close()
 	v := &Verifier{Broadcast: Arcade{URL: srv.URL}.Broadcaster(), Headers: HeadersOf(roots{})}
 	r, err := v.Verify(context.Background(), pkg, hex.EncodeToString(app.PublicKey()), data)
-	if err != nil || !r.OK || r.Purpose != "refresh" {
+	if err != nil || !r.OK || r.Purpose != "register" || r.Count != 1 {
 		t.Fatalf("%+v %v", r, err)
 	}
 	if _, err := DecodeAuthData("09" + data[2:]); err == nil || err.Error() != "unknown purpose tag 0x09" {

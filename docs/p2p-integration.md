@@ -39,6 +39,17 @@ commit). It matches the reference (`packages/bolt` `verifyIdentity`) and p2p's b
 `TestAPresentationMustSpendItsMint` on `vectors/authbolt.json` (a genuine presentation of a token rotated on chain,
 recorded by `vectors/gen/authbolt-moved.mjs`); negative control: drop the `IsMint` check and it is accepted.
 
+## Registration on chain (2026-10-10)
+
+ChainBrowsers `docs/authbolt-onchain-holder-keys.md`: registration moves the token from its mint to the
+identity's first holder key in a funded commit and settle the network has seen. `Verify` therefore takes only
+register (01) and reissue (06) data (70 bytes, with the holder count), refuses V1's unfunded shape ("a
+registration must be on chain: this move was never funded or broadcast"), drops the self-transfer rule, and its
+`Result` gives `Holder` = the new holder key's hash and `Count`; `HolderPubKey` is no longer set (the key comes
+with the holder's first signature). The mint rule stays. Tests build funded moves (`move` in authbolt_test.go);
+`TestAgreesWithTheSidecar` holds Go to packages/bolt's `verifyIdentity` on every case; `vectors/authbolt.json`
+is re-recorded (register data presented from a token already moved to holder 1).
+
 ## What p2p asks of this package next
 
 p2p keeps p2pd standard-library only by running this package in boltverifyd, a separate loopback-only verifier
