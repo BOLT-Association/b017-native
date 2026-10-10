@@ -29,7 +29,11 @@ const statement = "PeerLoop-AuthBOLT/1|signin|https://app.lab:8443|nonce|1999999
 
 func authData(tag string, app b017.KeySigner) string {
 	h := sha256.Sum256([]byte(statement))
-	return tag + hex.EncodeToString(app.PublicKey()) + hex.EncodeToString(h[:])
+	d := tag + hex.EncodeToString(app.PublicKey()) + hex.EncodeToString(h[:])
+	if tag == "01" || tag == "05" || tag == "06" {
+		d += "00000001" // register, rotate and reissue carry the holder count
+	}
+	return d
 }
 
 func mustHex(s string) []byte {
@@ -135,7 +139,7 @@ func cases(t *testing.T) []tcase {
 	data := authData("02", app)
 	dataBytes, _ := hex.DecodeString(data)
 	good := present(t, mint, owner, pkh, dataBytes)
-	writeData, unknownData := authData("04", app), authData("05", app)
+	writeData, unknownData := authData("04", app), authData("07", app)
 	return []tcase{
 		{name: "a self-transfer presentation", Package: good, AppPubKey: hex.EncodeToString(app.PublicKey()), Data: data, Broadcast: "already-seen", wantOK: true},
 		{name: "data for another challenge", Package: good, AppPubKey: hex.EncodeToString(app.PublicKey()), Data: authData("01", app), Broadcast: "already-seen",
@@ -148,7 +152,7 @@ func cases(t *testing.T) []tcase {
 		{name: "a malformed app key", Package: good, AppPubKey: "04ab", Data: data, Broadcast: "already-seen",
 			wantWhy: "the app key must be a 33-byte compressed public key (hex)"},
 		{name: "short auth data", Package: good, AppPubKey: hex.EncodeToString(app.PublicKey()), Data: data[:20], Broadcast: "already-seen",
-			wantWhy: "auth data must be exactly 66 bytes (hex)"},
+			wantWhy: "signin auth data must be exactly 66 bytes (hex)"},
 		{name: "not BEEF", Package: []string{"00", "01"}, AppPubKey: hex.EncodeToString(app.PublicKey()), Data: data, Broadcast: "already-seen"},
 		{name: "a write presentation", Package: present(t, mint, owner, pkh, mustHex(writeData)), AppPubKey: hex.EncodeToString(app.PublicKey()),
 			Data: writeData, Broadcast: "already-seen", wantOK: true, wantPurp: "write"},

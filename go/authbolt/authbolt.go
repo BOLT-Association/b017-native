@@ -37,7 +37,13 @@ type Result struct {
 // AuthDataBytes is AUTH_DATA_BYTES: [tag 1][app public key 33][SHA-256 of the challenge statement 32].
 const AuthDataBytes = 66
 
-var purposeOf = map[int]string{1: "register", 2: "signin", 3: "refresh", 4: "write"}
+// CountedAuthDataBytes is COUNTED_AUTH_DATA_BYTES: register, rotate and reissue add the holder count
+// [4, big-endian, at least 1].
+const CountedAuthDataBytes = 70
+
+var purposeOf = map[int]string{1: "register", 2: "signin", 3: "refresh", 4: "write", 5: "rotate", 6: "reissue"}
+
+var counted = map[string]bool{"register": true, "rotate": true, "reissue": true}
 
 func isHex(s string, chars int) bool {
 	if len(s) != chars {
@@ -55,29 +61,45 @@ func CheckAppKey(appPubKey string) (string, error) {
 	return strings.ToLower(appPubKey), nil
 }
 
-// AuthData is a decoded presentation's auth data.
+// AuthData is a decoded presentation's auth data. Count is the holder count (0 for the uncounted purposes).
 type AuthData struct {
 	Purpose       string
 	AppPubKey     string
 	ChallengeHash string
+	Count         uint32
 }
 
 // DecodeAuthData is identity.js decodeAuthData.
 func DecodeAuthData(data string) (AuthData, error) {
 	s := strings.ToLower(data)
-	if !isHex(s, AuthDataBytes*2) {
-		return AuthData{}, fmt.Errorf("auth data must be exactly %d bytes (hex)", AuthDataBytes)
+	if len(s) < 2 || !isHex(s, len(s)) {
+		return AuthData{}, fmt.Errorf("auth data must be hex")
 	}
 	tag, _ := strconv.ParseUint(s[:2], 16, 8)
 	purpose, ok := purposeOf[int(tag)]
 	if !ok {
 		return AuthData{}, fmt.Errorf("unknown purpose tag 0x%s", s[:2])
 	}
+	bytes := AuthDataBytes
+	if counted[purpose] {
+		bytes = CountedAuthDataBytes
+	}
+	if len(s) != bytes*2 {
+		return AuthData{}, fmt.Errorf("%s auth data must be exactly %d bytes (hex)", purpose, bytes)
+	}
 	app, err := CheckAppKey(s[2:68])
 	if err != nil {
 		return AuthData{}, fmt.Errorf("the auth data does not carry a valid app key")
 	}
-	return AuthData{Purpose: purpose, AppPubKey: app, ChallengeHash: s[68:]}, nil
+	out := AuthData{Purpose: purpose, AppPubKey: app, ChallengeHash: s[68:132]}
+	if counted[purpose] {
+		n, _ := strconv.ParseUint(s[132:], 16, 32)
+		if n < 1 {
+			return AuthData{}, fmt.Errorf("the holder count must be at least 1")
+		}
+		out.Count = uint32(n)
+	}
+	return out, nil
 }
 
 // Token is nft.js readToken's result for the NFT family.
