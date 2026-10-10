@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -231,6 +232,13 @@ func (v *Verifier) verify(ctx context.Context, pkg []string, issuer string) (*ch
 // registration (or reissue) must move the token out of its own mint to the identity's next holder, in a commit
 // and settle that are funded and seen by the network. Holder is the new holder key's hash; Count the holder count.
 func (v *Verifier) Verify(ctx context.Context, pkg []string, appKey, data string) (Result, error) {
+	return v.VerifyAt(ctx, pkg, appKey, data, "")
+}
+
+// VerifyAt is verifyIdentity with its outpoint: a rotation (rotate data) is checked like a registration, except
+// that its commit must spend `outpoint`, the token's outpoint the app recorded (the last verdict's TokenID),
+// instead of a mint. For register and reissue data the outpoint is not used.
+func (v *Verifier) VerifyAt(ctx context.Context, pkg []string, appKey, data, outpoint string) (Result, error) {
 	app, err := CheckAppKey(appKey)
 	if err != nil {
 		return Result{Reason: err.Error()}, nil
@@ -242,7 +250,8 @@ func (v *Verifier) Verify(ctx context.Context, pkg []string, appKey, data string
 	if decoded.AppPubKey != app {
 		return Result{Reason: "the auth data names another app"}, nil
 	}
-	if decoded.Purpose != "register" && decoded.Purpose != "reissue" {
+	rotating := decoded.Purpose == "rotate"
+	if !rotating && decoded.Purpose != "register" && decoded.Purpose != "reissue" {
 		return Result{Reason: decoded.Purpose + " data does not register an identity"}, nil
 	}
 	var issuer string
@@ -259,7 +268,13 @@ func (v *Verifier) Verify(ctx context.Context, pkg []string, appKey, data string
 	if issuer == "" {
 		return Result{Reason: "no BOLT token in the package"}, nil
 	}
-	mint, reason := mintProvenance(pkg, strings.ToLower(data))
+	var mint minted
+	var reason string
+	if rotating {
+		reason = spendsOutpoint(pkg, strings.ToLower(data), outpoint)
+	} else {
+		mint, reason = mintProvenance(pkg, strings.ToLower(data))
+	}
 	if reason != "" {
 		return Result{Reason: reason}, nil
 	}
@@ -279,12 +294,45 @@ func (v *Verifier) Verify(ctx context.Context, pkg []string, appKey, data string
 	if r.data != strings.ToLower(data) {
 		return Result{Reason: "the presentation carries other data than this challenge"}, nil
 	}
-	if r.issuer != mint.issuer {
+	if !rotating && r.issuer != mint.issuer {
 		return Result{Reason: "the presented token's issuer is not its mint's"}, nil
 	}
 	return Result{OK: true, Issuer: r.issuer, Holder: r.owner, TokenID: r.tokenID, Purpose: decoded.Purpose,
 		MintTxid: mint.txid, Count: decoded.Count}, nil
 }
+
+// spendsOutpoint is identity.js spendsOutpoint: a rotation's commit (the transaction whose first input carries
+// this auth data) must spend the token's recorded outpoint ("txid.vout"). "" or a refusal; no network call.
+func spendsOutpoint(pkg []string, data, outpoint string) string {
+	if !outpointRE.MatchString(outpoint) {
+		return "a rotation needs the token's recorded outpoint"
+	}
+	want, err := hex.DecodeString(data)
+	if err != nil {
+		return "the presentation carries other data than this challenge"
+	}
+	for _, entry := range pkg {
+		tx, err := b017.FromBeef(entry)
+		if err != nil || len(tx.Inputs) == 0 || tx.Inputs[0].UnlockingScript == nil {
+			continue
+		}
+		in := tx.Inputs[0]
+		if !bytes.Equal(b017.ChunkData(in.UnlockingScript, 0), want) {
+			continue // not the commit
+		}
+		src := in.SourceTXID
+		if src == "" && in.SourceTransaction != nil {
+			src, _ = in.SourceTransaction.ID()
+		}
+		if fmt.Sprintf("%s.%d", src, in.SourceOutputIndex) != strings.ToLower(outpoint) {
+			return "the rotation does not spend the token's recorded outpoint"
+		}
+		return ""
+	}
+	return "the presentation carries other data than this challenge" // no commit carries it
+}
+
+var outpointRE = regexp.MustCompile(`^[0-9a-fA-F]{64}\.[0-9]+$`)
 
 // minted is what mintProvenance found: the mint the commit spends, its issuer, and the key that signed the commit.
 type minted struct{ txid, issuer, signer string }
