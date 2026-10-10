@@ -12,7 +12,7 @@ Reference: `../b017` (branch `async-signer`, commit `a305f58`, public), read-onl
 | 2 NFT path | done, Go and Rust |
 | 3 scanner | done, Go and Rust |
 | 4 fungible | done, Go and Rust |
-| 5 hardening + p2p adapter | done: differential fuzzing, negative controls, coverage (accepted below the plan's 99%, see Coverage), Go AuthBOLT verifier, p2p patch written (`docs/p2p-integration.md`), CI |
+| 5 hardening + p2p adapter | done: differential fuzzing, negative controls, coverage (accepted below the plan's 99%, see Coverage), Go AuthBOLT verifier, p2p adapter (`docs/p2p-integration.md`; p2p runs it in boltverifyd), CI |
 
 `go test ./...` (in `go/`) and `cargo test -p b017` pass against every vector file; `go vet`, `gofmt`,
 `cargo fmt --check` and `cargo clippy -D warnings` are clean.
@@ -132,4 +132,4 @@ The plan asked for b017's floor (99% statements). Measured and accepted as enoug
 3. go-sdk: no fork or PR needed (fixed upstream).
 
 Left for the user: an issue on `bsv-blockchain/rs-sdk` (its interpreter has the same CHECKSIG subscript bug);
-the p2p change in `docs/p2p-integration.md` (not applied; another agent works in `p2p/`); Hodos use of the crate.
+Hodos use of the crate. (p2p uses the Go verifier in boltverifyd, see `docs/p2p-integration.md`.)

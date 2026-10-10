@@ -1,43 +1,32 @@
-# Verifying AuthBOLT in p2pd, in process
+# Verifying AuthBOLT for p2pd: boltverifyd
 
-p2pd (ChainBrowsers `p2p/`) verifies presentations in process with this package by default; the Node sidecar
-`bolt-verify` (packages/bolt) stays selectable with `-bolt-verify-url`. The Go package
-`github.com/BOLT-Association/b017-native/go/authbolt` is the same check in Go, on the Go b017 port:
+p2pd (ChainBrowsers `p2p/`, F1r3Hydr4nt/p2p branch `inprocess-verifier`) links no token-script code and stays
+standard-library only. It asks a loopback verifier service, and the default one is **boltverifyd**: p2p's nested Go
+module `p2p/boltverifyd`, built on this repo's `github.com/BOLT-Association/b017-native/go/authbolt`. The Node
+sidecar `bolt-verify` (packages/bolt) is the alternative. (On 2026-10-09 p2p first used this package in process,
+`dac8d3b`; it then moved into boltverifyd so p2pd keeps zero dependencies.)
 
-- `Verifier.Verify(ctx, pkg []string, appKey, data string) (Result, error)` is p2p's `authbolt.Verifier` method, and
-  `Result` has exactly p2p's fields (`OK, Reason, Issuer, Holder, TokenID, Purpose`), so a plain struct conversion
-  adapts it.
-- `HeadersOf(chain)` takes anything with `RootActive(height uint32, root string) bool`, which p2p's
-  `*headers.Chain` has: roots are judged against p2pd's own verified chain, as the sidecar's `headersTracker` does
-  over the loopback port today (only an active root counts).
-- `Arcade{URL, Headers}.Broadcaster()` is the sidecar's `arcadeBroadcaster`: an anchor proven into p2pd's headers is
-  "already seen" without asking Arcade; otherwise Arcade's status (GET `/tx/{txid}`), else a submission in Extended
-  Format and a wait for a network status (20 s).
+What boltverifyd takes from this package:
+
+- `Verifier.Verify(ctx, pkg []string, appKey, data string) (Result, error)`, with `Result` fields
+  `OK, Reason, Issuer, Holder, TokenID, Purpose`.
+- `HeadersOf(x)` for anything with `RootActive(height uint32, root string) bool`: boltverifyd answers it by asking
+  p2pd's own verified header chain over loopback (`-headers-url`, p2pd's `-internal-addr`); only an active root counts.
+- `Arcade{URL, Headers}.Broadcaster()`: an anchor proven into those headers is "already seen" without asking Arcade;
+  otherwise Arcade's status (GET `/tx/{txid}`), else a submission in Extended Format and a wait for a network status
+  (20 s).
+
+boltverifyd pins this module at `448de4a` (tag 04, purpose "write") and carries its own copy of the mint rule below;
+bumping it to `e5348fe` would let it drop that copy. Do not pin go-sdk v1.7.1 there: it reads script numbers wider
+than 64 bits by their low 64 bits (GHSA-rh54-8fpg-8wwf).
 
 Verified here: `go test ./authbolt/` builds real presentations (mint, commit carrying the auth data, settle to the same
 key) and runs them, and seven refusals, through this package; `TestAgreesWithTheSidecar` runs the same packages
 through packages/bolt `verifyIdentity` (the sidecar's code) and requires the same verdict and reason for every case.
-
-## How p2p uses it (applied 2026-10-09)
-
-p2p branch `inprocess-verifier` (F1r3Hydr4nt/p2p): `dac8d3b` (in process), `5346205` (bumped to `448de4a`, tag 04).
-
-1. **`go.mod`** requires `github.com/BOLT-Association/b017-native/go` at `448de4a`. It is p2pd's first dependency
-   (go-sdk at master 511b58c, go-whatsonchain, pkg/errors, x/crypto come with it). Do not pin go-sdk v1.7.1 in p2p:
-   v1.7.1 reads script numbers wider than 64 bits by their low 64 bits (GHSA-rh54-8fpg-8wwf). p2p's `labctl check`
-   replaces its zero-deps gate with `allowed-deps`, an allowlist of exactly these modules (tests included).
-2. **`internal/authbolt/inprocess.go`**: `InProcess{V *native.Verifier}`, whose `Verify` converts `Result` directly.
-3. **`cmd/p2pd/accounts.go`**: in process is the default. `headerChain()` returns p2pd's `*headers.Chain`; roots go
-   through `native.HeadersOf(chain)`, anchors through `native.Arcade{URL: -arcade-url, Headers}.Broadcaster()`.
-   With `-bolt-verify-url` (plus `-bolt-secret-file`) p2pd asks the sidecar instead and only then opens the loopback
-   root listener (`-internal-addr`). Each mode refuses the other's flags.
-4. **Contract test**: `p2p/testdata/contract/verify/recorded.json` holds real presentations and the sidecar's answers
-   (recorded by packages/bolt `scripts/record-verify-contract.mjs`). `internal/authbolt/inprocess_test.go` holds this
-   package to every verdict and reason, the write (tag 04) included since `448de4a`.
-5. **Live**: `tests/authbolt/peerloop.live.mjs` (ChainBrowsers) passes with p2pd in process: registration, sign-in,
-   keep-alive, a signed write and refusals, in Hodos on the regtest stack. Its negative control
-   (`NC_NO_VERIFIER=1`) cuts p2pd off from Arcade and chaintracks and fails at registration. `VERIFIER=sidecar`
-   runs the same test through the sidecar.
+In p2p, `p2p/testdata/contract/verify/recorded.json` holds real presentations and the sidecar's answers, and
+`boltverifyd/contract_test.go` holds boltverifyd to every one. Live: ChainBrowsers `tests/authbolt/peerloop.live.mjs`
+starts boltverifyd by default (`VERIFIER=sidecar` for the sidecar); its negative control (`NC_NO_VERIFIER=1`) cuts
+the verifier off from Arcade and from p2pd's headers and must fail at registration.
 
 ## The mint rule (2026-10-09)
 
@@ -52,8 +41,8 @@ recorded by `vectors/gen/authbolt-moved.mjs`); negative control: drop the `IsMin
 
 ## What p2p asks of this package next
 
-p2p's plan (`docs/claude-memory/plans/peerloop-holder-signatures.md`) wants to keep p2pd standard-library only by
-moving this package into a separate loopback-only verifier process, and asks here for:
+p2p keeps p2pd standard-library only by running this package in boltverifyd, a separate loopback-only verifier
+process (`docs/claude-memory/plans/peerloop-holder-signatures.md` in p2p), and asks here for:
 
 - ~~the data check before `VerifyAndBroadcast`~~: done by the mint rule (a package with no commit carrying the
   data is refused before any network call);
